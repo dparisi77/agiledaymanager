@@ -6,21 +6,20 @@
  */
 
 const FirebaseService = (() => {
-
   // ── INTERNAL STATE ───────────────────────────────────────
-  const LS_CONFIG_KEY = 'agileFirebaseConfig';
-  const COLLECTION    = 'resources';
+  const LS_CONFIG_KEY = "agileFirebaseConfig";
+  const COLLECTION = "resources";
 
-  let _db          = null;
+  let _db = null;
   let _unsubscribe = null;
-  let _onDataCb    = null;   // called on every Firestore snapshot
-  let _syncTimer   = null;
+  let _onDataCb = null; // called on every Firestore snapshot
+  let _syncTimer = null;
 
   // ── SETUP MODAL ──────────────────────────────────────────
 
   /** Show the Firebase setup modal. */
   function showSetupModal() {
-    const el = document.getElementById('setupModal');
+    const el = document.getElementById("setupModal");
     if (!el) return;
     const modal = bootstrap.Modal.getOrCreateInstance(el);
     modal.show();
@@ -28,7 +27,7 @@ const FirebaseService = (() => {
 
   /** Hide the Firebase setup modal. */
   function hideSetupModal() {
-    const el = document.getElementById('setupModal');
+    const el = document.getElementById("setupModal");
     if (!el) return;
     const modal = bootstrap.Modal.getInstance(el);
     if (modal) modal.hide();
@@ -41,12 +40,29 @@ const FirebaseService = (() => {
 
     try {
       const cfg = JSON.parse(saved);
-      _setInput('cfgApiKey',           cfg.apiKey);
-      _setInput('cfgAuthDomain',       cfg.authDomain);
-      _setInput('cfgProjectId',        cfg.projectId);
-      _setInput('cfgStorageBucket',    cfg.storageBucket);
-      _setInput('cfgMessagingSenderId',cfg.messagingSenderId);
-      _setInput('cfgAppId',            cfg.appId);
+      _setInput("cfgApiKey", cfg.apiKey);
+      _setInput("cfgAuthDomain", cfg.authDomain);
+      _setInput("cfgProjectId", cfg.projectId);
+      _setInput("cfgStorageBucket", cfg.storageBucket);
+      _setInput("cfgMessagingSenderId", cfg.messagingSenderId);
+      _setInput("cfgAppId", cfg.appId);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** Pre-fill the setup form from firebase-config.js file. */
+  function prefillFormFromFile() {
+    if (typeof FIREBASE_CONFIG === "undefined") return false;
+
+    try {
+      _setInput("cfgApiKey", FIREBASE_CONFIG.apiKey);
+      _setInput("cfgAuthDomain", FIREBASE_CONFIG.authDomain);
+      _setInput("cfgProjectId", FIREBASE_CONFIG.projectId);
+      _setInput("cfgStorageBucket", FIREBASE_CONFIG.storageBucket);
+      _setInput("cfgMessagingSenderId", FIREBASE_CONFIG.messagingSenderId);
+      _setInput("cfgAppId", FIREBASE_CONFIG.appId);
       return true;
     } catch (e) {
       return false;
@@ -61,18 +77,18 @@ const FirebaseService = (() => {
   /** Read config values from the setup form. */
   function _readConfigFromForm() {
     return {
-      apiKey:            _val('cfgApiKey'),
-      authDomain:        _val('cfgAuthDomain'),
-      projectId:         _val('cfgProjectId'),
-      storageBucket:     _val('cfgStorageBucket'),
-      messagingSenderId: _val('cfgMessagingSenderId'),
-      appId:             _val('cfgAppId'),
+      apiKey: _val("cfgApiKey"),
+      authDomain: _val("cfgAuthDomain"),
+      projectId: _val("cfgProjectId"),
+      storageBucket: _val("cfgStorageBucket"),
+      messagingSenderId: _val("cfgMessagingSenderId"),
+      appId: _val("cfgAppId"),
     };
   }
 
   function _val(id) {
     const el = document.getElementById(id);
-    return el ? el.value.trim() : '';
+    return el ? el.value.trim() : "";
   }
 
   // ── CONNECTION ───────────────────────────────────────────
@@ -85,15 +101,18 @@ const FirebaseService = (() => {
    */
   async function connect(cfg, onData) {
     if (!cfg.apiKey || !cfg.projectId) {
-      throw new Error('API Key e Project ID sono obbligatori.');
+      throw new Error("API Key e Project ID sono obbligatori.");
     }
 
     _onDataCb = onData;
 
     // Tear down previous Firebase app
-    if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
+    if (_unsubscribe) {
+      _unsubscribe();
+      _unsubscribe = null;
+    }
     if (firebase.apps.length) {
-      await Promise.all(firebase.apps.map(a => a.delete()));
+      await Promise.all(firebase.apps.map((a) => a.delete()));
     }
 
     const app = firebase.initializeApp(cfg);
@@ -117,7 +136,7 @@ const FirebaseService = (() => {
   /** Connect using the saved localStorage config. */
   async function connectFromStorage(onData) {
     const saved = localStorage.getItem(LS_CONFIG_KEY);
-    if (!saved) throw new Error('Nessuna configurazione salvata.');
+    if (!saved) throw new Error("Nessuna configurazione salvata.");
     const cfg = JSON.parse(saved);
     await connect(cfg, onData);
   }
@@ -128,7 +147,9 @@ const FirebaseService = (() => {
   }
 
   /** True if Firestore is initialized. */
-  function isConnected() { return _db !== null; }
+  function isConnected() {
+    return _db !== null;
+  }
 
   // ── REAL-TIME LISTENER ───────────────────────────────────
 
@@ -137,23 +158,23 @@ const FirebaseService = (() => {
 
     _unsubscribe = _db
       .collection(COLLECTION)
-      .orderBy('createdAt', 'asc')
+      .orderBy("createdAt", "asc")
       .onSnapshot(
-        snapshot => {
-          const resources = snapshot.docs.map(doc => ({
+        (snapshot) => {
+          const resources = snapshot.docs.map((doc) => ({
             id: doc.id,
             ...doc.data(),
             schedule: doc.data().schedule || {},
-            changes:  doc.data().changes  || {},
+            changes: doc.data().changes || {},
           }));
           if (_onDataCb) _onDataCb(resources);
           _hideSyncOverlay();
         },
-        err => {
-          console.error('[Firestore] snapshot error:', err);
-          _setConnStatus('error', 'Errore sync');
-          UI.toast('Errore sincronizzazione Firebase', 'error');
-        }
+        (err) => {
+          console.error("[Firestore] snapshot error:", err);
+          _setConnStatus("error", "Errore sync");
+          UI.toast("Errore sincronizzazione Firebase", "error");
+        },
       );
   }
 
@@ -174,7 +195,7 @@ const FirebaseService = (() => {
       });
       return ref.id;
     } catch (e) {
-      UI.toast('Errore salvataggio: ' + e.message, 'error');
+      UI.toast("Errore salvataggio: " + e.message, "error");
       _hideSyncOverlay();
       throw e;
     }
@@ -191,7 +212,7 @@ const FirebaseService = (() => {
     try {
       await _db.collection(COLLECTION).doc(id).update(data);
     } catch (e) {
-      UI.toast('Errore aggiornamento: ' + e.message, 'error');
+      UI.toast("Errore aggiornamento: " + e.message, "error");
       _hideSyncOverlay();
       throw e;
     }
@@ -207,67 +228,67 @@ const FirebaseService = (() => {
     try {
       await _db.collection(COLLECTION).doc(id).delete();
     } catch (e) {
-      UI.toast('Errore eliminazione: ' + e.message, 'error');
+      UI.toast("Errore eliminazione: " + e.message, "error");
       _hideSyncOverlay();
       throw e;
     }
   }
 
   function _ensureConnected() {
-    if (!_db) throw new Error('Firebase non connesso.');
+    if (!_db) throw new Error("Firebase non connesso.");
   }
 
   // ── UI STATE HELPERS ─────────────────────────────────────
 
   function _showSyncOverlay() {
     clearTimeout(_syncTimer);
-    document.getElementById('syncOverlay')?.classList.add('show');
+    document.getElementById("syncOverlay")?.classList.add("show");
   }
 
   function _hideSyncOverlay() {
     _syncTimer = setTimeout(() => {
-      document.getElementById('syncOverlay')?.classList.remove('show');
+      document.getElementById("syncOverlay")?.classList.remove("show");
     }, 400);
   }
 
   function _setConnStatus(status, label) {
-    const dot = document.getElementById('connDot');
-    const lbl = document.getElementById('connLabel');
-    if (dot) dot.className = 'conn-dot ' + status;
+    const dot = document.getElementById("connDot");
+    const lbl = document.getElementById("connLabel");
+    if (dot) dot.className = "conn-dot " + status;
     if (lbl) lbl.textContent = label;
   }
 
   /** Update connection indicator to "connected" state. */
   function setConnected(projectId) {
-    _setConnStatus('connected', projectId || 'Connesso');
+    _setConnStatus("connected", projectId || "Connesso");
   }
 
   /** Update connection indicator to "connecting" state. */
   function setConnecting() {
-    _setConnStatus('connecting', 'Connessione…');
+    _setConnStatus("connecting", "Connessione…");
   }
 
   /** Update connection indicator to "error" state. */
   function setError() {
-    _setConnStatus('error', 'Errore');
+    _setConnStatus("error", "Errore");
   }
 
   // ── SETUP ERROR UI ───────────────────────────────────────
 
   function showSetupError(msg) {
-    const el = document.getElementById('setupError');
+    const el = document.getElementById("setupError");
     if (!el) return;
     el.textContent = msg;
-    el.classList.remove('d-none');
+    el.classList.remove("d-none");
   }
 
   function hideSetupError() {
-    document.getElementById('setupError')?.classList.add('d-none');
+    document.getElementById("setupError")?.classList.add("d-none");
   }
 
   // ── USER COLLECTION ──────────────────────────────────────
 
-  const USERS_COLL = 'users';
+  const USERS_COLL = "users";
 
   /**
    * Query users by username (case-sensitive exact match).
@@ -276,7 +297,7 @@ const FirebaseService = (() => {
    */
   async function queryUsers(username) {
     _ensureConnected();
-    return _db.collection(USERS_COLL).where('username', '==', username).get();
+    return _db.collection(USERS_COLL).where("username", "==", username).get();
   }
 
   /**
@@ -285,8 +306,11 @@ const FirebaseService = (() => {
    */
   async function getAllUsers() {
     _ensureConnected();
-    const snap = await _db.collection(USERS_COLL).orderBy('createdAt', 'asc').get();
-    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const snap = await _db
+      .collection(USERS_COLL)
+      .orderBy("createdAt", "asc")
+      .get();
+    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
   }
 
   /**
@@ -325,6 +349,7 @@ const FirebaseService = (() => {
     showSetupModal,
     hideSetupModal,
     prefillFormFromStorage,
+    prefillFormFromFile,
     hasSavedConfig,
     isConnected,
     connect,
@@ -346,16 +371,13 @@ const FirebaseService = (() => {
     showSetupError,
     hideSetupError,
   };
-
 })();
-
 
 /**
  * UI utility — toast notification.
  * Separated here (not in app.js) so firebase.js can call it for errors.
  */
 const UI = (() => {
-
   let _timer = null;
 
   /**
@@ -364,15 +386,16 @@ const UI = (() => {
    * @param {'success'|'warning'|'error'} type
    * @param {number} duration  ms
    */
-  function toast(msg, type = 'success', duration = 3200) {
-    const el = document.getElementById('toast');
+  function toast(msg, type = "success", duration = 3200) {
+    const el = document.getElementById("toast");
     if (!el) return;
     el.textContent = msg;
     el.className = `agile-toast show ${type}`;
     clearTimeout(_timer);
-    _timer = setTimeout(() => { el.className = 'agile-toast'; }, duration);
+    _timer = setTimeout(() => {
+      el.className = "agile-toast";
+    }, duration);
   }
 
   return { toast };
-
 })();

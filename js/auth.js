@@ -15,27 +15,40 @@
  */
 
 const Auth = (() => {
+  const SESSION_KEY = "agileSession";
+  const USERS_COLL = "users";
+  const DEFAULT_ADMIN = {
+    username: "admin",
+    password: "admin2024",
+    role: "admin",
+  };
 
-  const SESSION_KEY    = 'agileSession';
-  const USERS_COLL     = 'users';
-  const DEFAULT_ADMIN  = { username: 'admin', password: 'admin2024', role: 'admin' };
-
-  let _session = null;   // { id, username, role, resourceId|null }
+  let _session = null; // { id, username, role, resourceId|null }
   let _onAuthChange = null;
 
   // ── SESSION ─────────────────────────────────────────────
 
-  function getSession() { return _session; }
-  function isLoggedIn()  { return _session !== null; }
-  function isAdmin()     { return _session?.role === 'admin'; }
-  function isUser()      { return _session?.role === 'user'; }
+  function getSession() {
+    return _session;
+  }
+  function isLoggedIn() {
+    return _session !== null;
+  }
+  function isAdmin() {
+    return _session?.role === "admin";
+  }
+  function isUser() {
+    return _session?.role === "user";
+  }
 
   /** Restore session from sessionStorage on page load. */
   function restoreSession() {
     try {
       const raw = sessionStorage.getItem(SESSION_KEY);
       if (raw) _session = JSON.parse(raw);
-    } catch (_) { _session = null; }
+    } catch (_) {
+      _session = null;
+    }
     return _session;
   }
 
@@ -51,16 +64,18 @@ const Auth = (() => {
   }
 
   /** Register a callback invoked whenever auth state changes. */
-  function onAuthChange(cb) { _onAuthChange = cb; }
+  function onAuthChange(cb) {
+    _onAuthChange = cb;
+  }
 
   // ── CRYPTO ──────────────────────────────────────────────
 
   async function hashPassword(password) {
-    const enc    = new TextEncoder().encode(password);
-    const buf    = await crypto.subtle.digest('SHA-256', enc);
+    const enc = new TextEncoder().encode(password);
+    const buf = await crypto.subtle.digest("SHA-256", enc);
     return Array.from(new Uint8Array(buf))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
   }
 
   // ── LOGIN ────────────────────────────────────────────────
@@ -75,7 +90,7 @@ const Auth = (() => {
    */
   async function login(username, password) {
     if (!username || !password) {
-      return { ok: false, error: 'Username e password obbligatori.' };
+      return { ok: false, error: "Username e password obbligatori." };
     }
 
     const hash = await hashPassword(password);
@@ -85,15 +100,15 @@ const Auth = (() => {
       try {
         const snap = await FirebaseService.queryUsers(username);
         if (!snap.empty) {
-          const doc  = snap.docs[0];
+          const doc = snap.docs[0];
           const data = doc.data();
           if (data.passwordHash !== hash) {
-            return { ok: false, error: 'Credenziali non valide.' };
+            return { ok: false, error: "Credenziali non valide." };
           }
           const session = {
-            id:         doc.id,
-            username:   data.username,
-            role:       data.role,
+            id: doc.id,
+            username: data.username,
+            role: data.role,
             resourceId: data.resourceId || null,
           };
           _saveSession(session);
@@ -101,7 +116,7 @@ const Auth = (() => {
           return { ok: true };
         }
       } catch (e) {
-        console.warn('[Auth] Firestore query failed, using fallback:', e);
+        console.warn("[Auth] Firestore query failed, using fallback:", e);
       }
     }
 
@@ -109,14 +124,19 @@ const Auth = (() => {
     if (username === DEFAULT_ADMIN.username) {
       const defaultHash = await hashPassword(DEFAULT_ADMIN.password);
       if (hash === defaultHash) {
-        const session = { id: 'default-admin', username, role: 'admin', resourceId: null };
+        const session = {
+          id: "default-admin",
+          username,
+          role: "admin",
+          resourceId: null,
+        };
         _saveSession(session);
         if (_onAuthChange) _onAuthChange(session);
         return { ok: true };
       }
     }
 
-    return { ok: false, error: 'Credenziali non valide.' };
+    return { ok: false, error: "Credenziali non valide." };
   }
 
   // ── USER MANAGEMENT (admin only) ─────────────────────────
@@ -142,27 +162,39 @@ const Auth = (() => {
    * @param {number}          coeff0          initial coefficient (user role only)
    * @param {number}          createdWeekOffset
    */
-  async function createUser({ username, password, role, category, baseDay, coeff0, createdWeekOffset = 0 }) {
-    if (!FirebaseService.isConnected()) return { ok: false, error: 'Firebase non connesso.' };
-    if (!username || !password)          return { ok: false, error: 'Campi obbligatori mancanti.' };
+  async function createUser({
+    username,
+    password,
+    role,
+    category,
+    baseDay,
+    coeff0,
+    createdWeekOffset = 0,
+  }) {
+    if (!FirebaseService.isConnected())
+      return { ok: false, error: "Firebase non connesso." };
+    if (!username || !password)
+      return { ok: false, error: "Campi obbligatori mancanti." };
 
     // Check username uniqueness
     const existing = await FirebaseService.queryUsers(username);
-    if (!existing.empty) return { ok: false, error: `Username "${username}" già esistente.` };
+    if (!existing.empty)
+      return { ok: false, error: `Username "${username}" già esistente.` };
 
     const passwordHash = await hashPassword(password);
 
     // For 'user' role: auto-create a linked resource document
     let resourceId = null;
-    if (role === 'user') {
+    if (role === "user") {
       resourceId = await FirebaseService.addResource({
-        name:              username,
-        category:          category || 'Developer',
-        baseDay:           typeof baseDay === 'number' ? baseDay : 0,
-        coeff0:            typeof coeff0  === 'number' ? Math.min(10, Math.max(0, coeff0)) : 5.0,
+        name: username,
+        category: category || "Developer",
+        baseDay: typeof baseDay === "number" ? baseDay : 0,
+        coeff0:
+          typeof coeff0 === "number" ? Math.min(10, Math.max(0, coeff0)) : 5.0,
         createdWeekOffset: createdWeekOffset,
-        schedule:          {},
-        changes:           {},
+        schedule: {},
+        changes: {},
       });
     }
 
@@ -175,12 +207,15 @@ const Auth = (() => {
    * @param {string} userId  Firestore document id
    */
   async function deleteUser(userId) {
-    if (!FirebaseService.isConnected()) throw new Error('Firebase non connesso.');
+    if (!FirebaseService.isConnected())
+      throw new Error("Firebase non connesso.");
     // Find and delete linked resource
     const allUsers = await FirebaseService.getAllUsers();
-    const user = allUsers.find(u => u.id === userId);
+    const user = allUsers.find((u) => u.id === userId);
     if (user?.resourceId) {
-      try { await FirebaseService.deleteResource(user.resourceId); } catch(_) {}
+      try {
+        await FirebaseService.deleteResource(user.resourceId);
+      } catch (_) {}
     }
     await FirebaseService.deleteUserDoc(userId);
   }
@@ -193,6 +228,53 @@ const Auth = (() => {
   async function changePassword(userId, newPassword) {
     const hash = await hashPassword(newPassword);
     await FirebaseService.updateUserDoc(userId, { passwordHash: hash });
+  }
+
+  /**
+   * Update user information (username, password, role).
+   * If password is empty, it's not changed.
+   * @param {string} userId
+   * @param {Object} updates  { username?, newPassword?, role? }
+   * @returns {Promise<{ok:boolean, error?:string}>}
+   */
+  async function updateUser(userId, updates = {}) {
+    if (!FirebaseService.isConnected())
+      return { ok: false, error: "Firebase non connesso." };
+
+    const allUsers = await FirebaseService.getAllUsers();
+    const currentUser = allUsers.find((u) => u.id === userId);
+    if (!currentUser) return { ok: false, error: "Utente non trovato." };
+
+    const updateData = {};
+
+    // Check for username uniqueness if changed
+    if (updates.username && updates.username !== currentUser.username) {
+      const existing = await FirebaseService.queryUsers(updates.username);
+      if (!existing.empty)
+        return {
+          ok: false,
+          error: `Username "${updates.username}" già esistente.`,
+        };
+      updateData.username = updates.username;
+    }
+
+    // Update password if provided
+    if (updates.newPassword) {
+      const hash = await hashPassword(updates.newPassword);
+      updateData.passwordHash = hash;
+    }
+
+    // Update role
+    if (updates.role && ["admin", "user"].includes(updates.role)) {
+      updateData.role = updates.role;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return { ok: true }; // Nothing to update
+    }
+
+    await FirebaseService.updateUserDoc(userId, updateData);
+    return { ok: true };
   }
 
   // ── PUBLIC ───────────────────────────────────────────────
@@ -208,7 +290,7 @@ const Auth = (() => {
     createUser,
     deleteUser,
     changePassword,
+    updateUser,
     hashPassword,
   };
-
 })();

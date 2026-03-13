@@ -44,7 +44,30 @@ agile_manager/
    cd agile_manager
    ```
 
-2. **Configura Firebase**
+2. **Configura Firebase (opzione 1: File di Configurazione)** ⭐ **Consigliato**
+   - Copia `firebase-config.example.js` in `firebase-config.js`:
+     ```bash
+     cp firebase-config.example.js firebase-config.js
+     ```
+   - Apri `firebase-config.js` e inserisci le tue credenziali Firebase:
+     - Vai a [Firebase Console](https://console.firebase.google.com)
+     - Seleziona il tuo progetto
+     - Settings → Project Settings → Your Apps → Web App
+     - Copia i valori dal `firebaseConfig` object
+   - Salva il file
+   - La configurazione verrà caricata automaticamente all'avvio dell'app
+   - **Nota:** `firebase-config.js` è nel `.gitignore` per proteggere le credenziali
+
+3. **Configura Firebase (opzione 2: Modal Setup)** (Alternativa)
+
+   Se preferisci inserire le credenziali al primo accesso:
+   - Salta il file `firebase-config.js`
+   - Al login, visualizzerai il modal di setup
+   - Compila i campi con le tue credenziali Firebase
+   - Clicca "Connetti a Firebase"
+   - La configurazione verrà salvata nel localStorage
+
+4. **Abilita Firestore Database**
    - Accedi a [Firebase Console](https://console.firebase.google.com)
    - Crea un nuovo progetto o usa uno esistente
    - Abilita **Firestore Database** in modalità test
@@ -53,8 +76,7 @@ agile_manager/
      allow read, write: if true;
      ```
 
-3. **Avvia l'applicazione**
-   - Apri `index.html` nel browser oppure
+5. **Avvia l'applicazione**
    - Usa un server locale:
      ```bash
      python -m http.server 8000
@@ -62,13 +84,7 @@ agile_manager/
      npx http-server
      ```
    - Accedi a `http://localhost:8000`
-
-4. **Connetti Firebase**
-   - Al primo accesso, visualizzerai il modal di setup
-   - Copia i dati di configurazione dalla Firebase Console
-   - Compila i campi: API Key, Auth Domain, Project ID, Storage Bucket, Messaging Sender ID, App ID
-   - Clicca "Connetti a Firebase"
-   - La configurazione verrà salvata nel localStorage per accessi futuri
+   - Firebase si connetterà automaticamente se configurato
 
 ## 🔐 Autenticazione
 
