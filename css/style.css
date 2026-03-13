@@ -798,3 +798,41 @@ body {
   .dash-kpi-value { font-size: 1.1rem; }
   .logo { font-size: 1.1rem; }
 }
+
+/* ── USER RESOURCE SECTION (Users view) ────────────────── */
+.user-resource-section {
+  background: rgba(var(--accent-rgb), 0.04);
+  border: 1px solid rgba(var(--accent-rgb), 0.2);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 12px;
+  transition: all 0.2s;
+}
+
+.user-resource-header {
+  font-family: 'Syne', sans-serif;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.user-resource-note {
+  font-size: 0.65rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+/* Password toggle addon */
+.agile-input-addon {
+  background: var(--surface2) !important;
+  border-color: var(--border) !important;
+  color: var(--muted) !important;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.agile-input-addon:hover { color: var(--accent) !important; }

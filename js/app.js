@@ -75,8 +75,6 @@ const App = (() => {
         await FirebaseService.connectFromStorage(_onFirestoreData);
         const cfg = JSON.parse(localStorage.getItem('agileFirebaseConfig') || '{}');
         FirebaseService.setConnected(cfg.projectId || 'Firebase');
-        const addBtn = document.getElementById('addBtn');
-        if (addBtn) addBtn.disabled = false;
         UI.toast('🔥 Firebase connesso', 'success', 2000);
       } catch (_) { /* will prompt via setup modal */ }
     }
@@ -135,8 +133,6 @@ const App = (() => {
       const pid = document.getElementById('cfgProjectId')?.value.trim() || 'Firebase';
       FirebaseService.setConnected(pid);
       FirebaseService.hideSetupModal();
-      const addBtn = document.getElementById('addBtn');
-      if (addBtn) addBtn.disabled = !Auth.isAdmin();
       UI.toast('🔥 Firebase connesso!', 'success');
     } catch (err) {
       FirebaseService.setError();
@@ -154,8 +150,6 @@ const App = (() => {
       const cfg = JSON.parse(localStorage.getItem('agileFirebaseConfig') || '{}');
       FirebaseService.setConnected(cfg.projectId || 'Firebase');
       FirebaseService.hideSetupModal();
-      const addBtn = document.getElementById('addBtn');
-      if (addBtn) addBtn.disabled = !Auth.isAdmin();
       UI.toast('🔥 Firebase riconnesso', 'success');
     } catch (err) {
       FirebaseService.setError();
@@ -179,28 +173,6 @@ const App = (() => {
   }
 
   // ── RESOURCE ACTIONS ─────────────────────────────────────
-
-  async function addResource() {
-    if (!Auth.isAdmin()) { UI.toast('Permesso negato', 'error'); return; }
-    if (!FirebaseService.isConnected()) { UI.toast('Firebase non connesso', 'error'); return; }
-
-    const name     = document.getElementById('inputName')?.value.trim();
-    const category = document.getElementById('inputCategory')?.value;
-    const baseDay  = parseInt(document.getElementById('inputBaseDay')?.value ?? '0');
-    const coeff0   = parseFloat(document.getElementById('inputCoeff')?.value ?? '5');
-
-    if (!name) { UI.toast('Inserisci un nome', 'warning'); return; }
-
-    await FirebaseService.addResource({
-      name, category: category || 'Developer', baseDay,
-      coeff0:            Math.min(Utils.COEFF_MAX, Math.max(Utils.COEFF_MIN, coeff0)),
-      createdWeekOffset: state.currentWeekOffset,
-      schedule: {}, changes: {},
-    });
-    const nameEl = document.getElementById('inputName');
-    if (nameEl) nameEl.value = '';
-    UI.toast(`${name} aggiunto/a ✓`, 'success');
-  }
 
   async function removeResource(id) {
     if (!Auth.isAdmin()) { UI.toast('Permesso negato', 'error'); return; }
@@ -256,20 +228,36 @@ const App = (() => {
   // ── USER MANAGEMENT ──────────────────────────────────────
 
   async function createUser() {
-    const username   = document.getElementById('newUsername')?.value.trim();
-    const password   = document.getElementById('newPassword')?.value;
-    const role       = document.getElementById('newRole')?.value;
-    const resourceId = document.getElementById('newResourceId')?.value || null;
-    const errEl      = document.getElementById('userFormError');
+    const username  = document.getElementById('newUsername')?.value.trim();
+    const password  = document.getElementById('newPassword')?.value;
+    const role      = document.getElementById('newRole')?.value;
+    const errEl     = document.getElementById('userFormError');
     errEl?.classList.add('d-none');
 
-    const result = await Auth.createUser({ username, password, role, resourceId });
+    // Extra fields only meaningful for 'user' role
+    const category = document.getElementById('newCategory')?.value  || 'Developer';
+    const baseDay  = parseInt(document.getElementById('newBaseDay')?.value ?? '0');
+    const coeff0   = parseFloat(document.getElementById('newCoeff')?.value  ?? '5');
+
+    const result = await Auth.createUser({
+      username, password, role,
+      category, baseDay, coeff0,
+      createdWeekOffset: state.currentWeekOffset,
+    });
+
     if (!result.ok) {
       if (errEl) { errEl.textContent = result.error; errEl.classList.remove('d-none'); }
       return;
     }
-    ['newUsername','newPassword'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
-    UI.toast(`Utente "${username}" creato`, 'success');
+
+    ['newUsername','newPassword'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+
+    const msg = role === 'user'
+      ? `Utente "${username}" creato con risorsa collegata ✓`
+      : `Admin "${username}" creato ✓`;
+    UI.toast(msg, 'success');
     try { state.usersList = await FirebaseService.getAllUsers(); } catch(_) {}
     _renderUsersPanel();
   }
@@ -296,20 +284,23 @@ const App = (() => {
     try { state.usersList = await FirebaseService.getAllUsers(); } catch(_) {}
     const users = state.usersList;
 
-    const resourceOptions = state.resources.map(r =>
-      `<option value="${r.id}">${_esc(r.name)} (${r.category})</option>`
-    ).join('');
-
+    // Build table rows
     const rows = users.map(u => {
       const roleBadge = `<span class="badge-role badge-${u.role}">${u.role.toUpperCase()}</span>`;
       const linkedRes = u.resourceId
-        ? (state.resources.find(r => r.id === u.resourceId)?.name || u.resourceId)
+        ? (state.resources.find(r => r.id === u.resourceId)?.name || '<em>risorsa rimossa</em>')
         : '—';
+      const linkedCat = u.resourceId
+        ? (state.resources.find(r => r.id === u.resourceId)?.category || '')
+        : '';
       const isSelf = u.id === Auth.getSession()?.id;
+      const catBadge = linkedCat
+        ? `<span class="cat-badge cat-${linkedCat} ms-1">${linkedCat}</span>`
+        : '';
       return `<tr>
-        <td style="font-family:'Syne',sans-serif;font-weight:600">${_esc(u.username)}</td>
+        <td style="font-family:'Syne',sans-serif;font-weight:600;font-size:0.82rem">${_esc(u.username)}</td>
         <td>${roleBadge}</td>
-        <td style="color:var(--muted);font-size:0.75rem">${_esc(linkedRes)}</td>
+        <td style="font-size:0.75rem">${linkedRes}${catBadge}</td>
         <td>${!isSelf
           ? `<button class="btn-remove" onclick="App.deleteUser('${u.id}')">✕</button>`
           : '<span style="color:var(--muted);font-size:0.7rem">(tu)</span>'}</td>
@@ -317,44 +308,99 @@ const App = (() => {
     }).join('');
 
     el.innerHTML = `
+      <!-- ── ADD USER FORM ── -->
       <div class="dash-panel mb-4">
         <div class="dash-panel-title"><i class="bi bi-person-plus me-1"></i>Nuovo Utente</div>
-        <div class="row g-2 align-items-end">
-          <div class="col-12 col-sm-6 col-md-3">
+
+        <!-- Credentials row -->
+        <div class="row g-2 mb-2">
+          <div class="col-12 col-sm-6 col-md-4">
             <label class="form-label">Username</label>
             <input type="text" class="form-control form-control-sm agile-input" id="newUsername" placeholder="mario.rossi" />
           </div>
-          <div class="col-12 col-sm-6 col-md-3">
+          <div class="col-12 col-sm-6 col-md-4">
             <label class="form-label">Password</label>
-            <input type="password" class="form-control form-control-sm agile-input" id="newPassword" placeholder="••••••••" />
+            <div class="input-group input-group-sm">
+              <input type="password" class="form-control agile-input" id="newPassword" placeholder="••••••••" />
+              <button class="input-group-text agile-input-addon" type="button"
+                onclick="const f=document.getElementById('newPassword');f.type=f.type==='password'?'text':'password';this.querySelector('i').className=f.type==='password'?'bi bi-eye':'bi bi-eye-slash'">
+                <i class="bi bi-eye"></i>
+              </button>
+            </div>
           </div>
-          <div class="col-6 col-md-2">
+          <div class="col-12 col-sm-6 col-md-4">
             <label class="form-label">Ruolo</label>
-            <select class="form-select form-select-sm agile-input" id="newRole">
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
+            <select class="form-select form-select-sm agile-input" id="newRole"
+              onchange="document.getElementById('userResourceSection').classList.toggle('d-none', this.value !== 'user')">
+              <option value="user">👤 User</option>
+              <option value="admin">🔑 Admin</option>
             </select>
-          </div>
-          <div class="col-6 col-md-3">
-            <label class="form-label">Risorsa collegata</label>
-            <select class="form-select form-select-sm agile-input" id="newResourceId">
-              <option value="">— nessuna —</option>${resourceOptions}
-            </select>
-          </div>
-          <div class="col-12 col-md-1">
-            <button class="btn btn-agile w-100" onclick="App.createUser()"><i class="bi bi-plus-lg"></i></button>
           </div>
         </div>
+
+        <!-- Resource config — shown only for 'user' role -->
+        <div id="userResourceSection" class="user-resource-section">
+          <div class="user-resource-header">
+            <i class="bi bi-person-workspace me-1"></i>
+            Configurazione Risorsa — generata automaticamente per l'utente
+          </div>
+          <div class="row g-2">
+            <div class="col-12 col-sm-6 col-md-4">
+              <label class="form-label">Categoria</label>
+              <select class="form-select form-select-sm agile-input" id="newCategory">
+                <option value="Developer">💻 Developer</option>
+                <option value="SysAdmin">🖥️ SysAdmin</option>
+                <option value="HelpDesk">🎧 HelpDesk</option>
+                <option value="DBA">🗄️ DBA</option>
+                <option value="Manager">📋 Manager</option>
+              </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4">
+              <label class="form-label">Giorno agile base</label>
+              <select class="form-select form-select-sm agile-input" id="newBaseDay">
+                <option value="0">Lunedì</option>
+                <option value="1">Martedì</option>
+                <option value="2">Mercoledì</option>
+                <option value="3">Giovedì</option>
+                <option value="4">Venerdì</option>
+              </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4">
+              <label class="form-label">Coefficiente iniziale</label>
+              <input type="number" class="form-control form-control-sm agile-input" id="newCoeff"
+                value="5.0" step="0.1" min="0" max="10" />
+            </div>
+          </div>
+          <div class="user-resource-note mt-2">
+            <i class="bi bi-info-circle me-1"></i>
+            Il nome della risorsa corrisponderà all'username. Potrai rinominarlo in seguito.
+          </div>
+        </div>
+
         <div class="alert alert-danger py-1 mt-2 small d-none" id="userFormError"></div>
+
+        <div class="mt-3">
+          <button class="btn btn-agile px-4" onclick="App.createUser()">
+            <i class="bi bi-plus-lg me-1"></i>Crea Utente
+          </button>
+        </div>
       </div>
+
+      <!-- ── USERS TABLE ── -->
       <div class="dash-panel">
-        <div class="dash-panel-title"><i class="bi bi-people me-1"></i>Utenti (${users.length})</div>
-        ${users.length ? `<div style="overflow-x:auto"><table class="dash-table">
-          <thead><tr><th>Username</th><th>Ruolo</th><th>Risorsa collegata</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table></div>` : '<div class="empty-state">Nessun utente</div>'}
+        <div class="dash-panel-title"><i class="bi bi-people me-1"></i>Utenti registrati (${users.length})</div>
+        ${users.length ? `
+          <div style="overflow-x:auto">
+            <table class="dash-table">
+              <thead><tr>
+                <th>Username</th><th>Ruolo</th><th>Risorsa collegata</th><th></th>
+              </tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>` : '<div class="empty-state">Nessun utente — crea il primo account sopra</div>'}
       </div>`;
   }
+
 
   // ── MAIN RENDER ──────────────────────────────────────────
 
@@ -367,8 +413,6 @@ const App = (() => {
     document.querySelectorAll('.admin-only').forEach(el =>
       el.classList.toggle('d-none', !Auth.isAdmin())
     );
-    const addBtn = document.getElementById('addBtn');
-    if (addBtn) addBtn.disabled = !Auth.isAdmin() || !FirebaseService.isConnected();
   }
 
   function _renderWeekNav() {
@@ -557,7 +601,7 @@ const App = (() => {
     submitLogin, logout,
     connectFirebase, loadSavedConfig, showSetup,
     prevWeek, nextWeek,
-    addResource, removeResource, selectResource,
+    removeResource, selectResource,
     requestChange, removeChange,
     createUser, deleteUser,
     showMain, showDashboard, showUsers,

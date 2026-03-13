@@ -130,25 +130,58 @@ const Auth = (() => {
    * @param {string|null} opts.resourceId   link to resource doc id
    * @returns {Promise<{ok:boolean, error?:string}>}
    */
-  async function createUser({ username, password, role, resourceId = null }) {
+  /**
+   * Create a new user in Firestore.
+   * If role === 'user', automatically creates a linked resource document.
+   *
+   * @param {string}          username
+   * @param {string}          password        plaintext
+   * @param {'admin'|'user'}  role
+   * @param {string}          category        (user role only)
+   * @param {number}          baseDay         0-4 Mon-Fri (user role only)
+   * @param {number}          coeff0          initial coefficient (user role only)
+   * @param {number}          createdWeekOffset
+   */
+  async function createUser({ username, password, role, category, baseDay, coeff0, createdWeekOffset = 0 }) {
     if (!FirebaseService.isConnected()) return { ok: false, error: 'Firebase non connesso.' };
     if (!username || !password)          return { ok: false, error: 'Campi obbligatori mancanti.' };
 
-    // Check uniqueness
+    // Check username uniqueness
     const existing = await FirebaseService.queryUsers(username);
     if (!existing.empty) return { ok: false, error: `Username "${username}" già esistente.` };
 
     const passwordHash = await hashPassword(password);
-    await FirebaseService.addUser({ username, passwordHash, role, resourceId, createdAt: null });
-    return { ok: true };
+
+    // For 'user' role: auto-create a linked resource document
+    let resourceId = null;
+    if (role === 'user') {
+      resourceId = await FirebaseService.addResource({
+        name:              username,
+        category:          category || 'Developer',
+        baseDay:           typeof baseDay === 'number' ? baseDay : 0,
+        coeff0:            typeof coeff0  === 'number' ? Math.min(10, Math.max(0, coeff0)) : 5.0,
+        createdWeekOffset: createdWeekOffset,
+        schedule:          {},
+        changes:           {},
+      });
+    }
+
+    await FirebaseService.addUser({ username, passwordHash, role, resourceId });
+    return { ok: true, resourceId };
   }
 
   /**
-   * Delete a user from Firestore.
+   * Delete a user (and their linked resource, if any) from Firestore.
    * @param {string} userId  Firestore document id
    */
   async function deleteUser(userId) {
     if (!FirebaseService.isConnected()) throw new Error('Firebase non connesso.');
+    // Find and delete linked resource
+    const allUsers = await FirebaseService.getAllUsers();
+    const user = allUsers.find(u => u.id === userId);
+    if (user?.resourceId) {
+      try { await FirebaseService.deleteResource(user.resourceId); } catch(_) {}
+    }
     await FirebaseService.deleteUserDoc(userId);
   }
 
