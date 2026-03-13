@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Agile Day Manager</title>
+    <title>Agile Day Manager · Firebase</title>
     <link
       href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap"
       rel="stylesheet">
@@ -17,6 +17,7 @@
         --accent: #6ee7b7;
         --accent2: #f59e0b;
         --accent3: #f87171;
+        --firebase: #FFA000;
         --text: #e2e8f0;
         --muted: #64748b;
         --radius: 12px;
@@ -36,7 +37,6 @@
         overflow-x: hidden;
       }
 
-      /* Background grid */
       body::before {
         content: '';
         position: fixed;
@@ -49,6 +49,201 @@
         z-index: 0;
       }
 
+      /* ── SETUP OVERLAY ── */
+      #setupOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 10, 15, 0.97);
+        backdrop-filter: blur(8px);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      #setupOverlay.hidden {
+        display: none;
+      }
+
+      .setup-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 36px;
+        max-width: 520px;
+        width: 100%;
+        animation: fadeUp 0.3s ease;
+      }
+
+      @keyframes fadeUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .setup-logo {
+        font-family: 'Syne', sans-serif;
+        font-size: 1.4rem;
+        font-weight: 800;
+        margin-bottom: 6px;
+      }
+
+      .setup-logo span {
+        color: var(--accent);
+      }
+
+      .setup-subtitle {
+        font-size: 0.75rem;
+        color: var(--muted);
+        margin-bottom: 28px;
+        line-height: 1.6;
+      }
+
+      .setup-subtitle a {
+        color: var(--firebase);
+        text-decoration: none;
+      }
+
+      .setup-subtitle a:hover {
+        text-decoration: underline;
+      }
+
+      .setup-steps {
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px;
+        margin-bottom: 24px;
+        font-size: 0.72rem;
+        color: var(--muted);
+        line-height: 2;
+      }
+
+      .setup-steps ol {
+        padding-left: 16px;
+      }
+
+      .setup-steps li {
+        margin-bottom: 2px;
+      }
+
+      .setup-steps .hl {
+        color: var(--accent);
+        font-weight: 500;
+      }
+
+      .setup-steps .fb {
+        color: var(--firebase);
+        font-weight: 500;
+      }
+
+      .setup-steps code {
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 4px;
+        padding: 1px 6px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.68rem;
+        color: var(--accent2);
+      }
+
+      .setup-form .form-row {
+        margin-bottom: 12px;
+      }
+
+      .setup-form label {
+        display: block;
+        font-size: 0.65rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 4px;
+      }
+
+      .setup-form input {
+        width: 100%;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.8rem;
+        padding: 9px 12px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      .setup-form input:focus {
+        border-color: var(--accent);
+      }
+
+      .setup-error {
+        background: rgba(248, 113, 113, 0.1);
+        border: 1px solid rgba(248, 113, 113, 0.3);
+        color: var(--accent3);
+        border-radius: 8px;
+        padding: 10px 14px;
+        font-size: 0.72rem;
+        margin-bottom: 12px;
+        display: none;
+      }
+
+      .setup-error.show {
+        display: block;
+      }
+
+      .setup-btn {
+        width: 100%;
+        padding: 12px;
+        background: var(--firebase);
+        color: #000;
+        border: none;
+        border-radius: 8px;
+        font-family: 'Syne', sans-serif;
+        font-weight: 700;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.15s;
+        letter-spacing: 0.5px;
+      }
+
+      .setup-btn:hover {
+        background: #FFB300;
+        transform: translateY(-1px);
+      }
+
+      .setup-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      .setup-saved-btn {
+        width: 100%;
+        padding: 10px;
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        border-radius: 8px;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.72rem;
+        cursor: pointer;
+        margin-top: 8px;
+        transition: border-color 0.15s;
+      }
+
+      .setup-saved-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+
+      /* ── APP ── */
       .app {
         position: relative;
         z-index: 1;
@@ -57,7 +252,6 @@
         padding: 24px;
       }
 
-      /* Header */
       header {
         display: flex;
         align-items: center;
@@ -65,6 +259,8 @@
         margin-bottom: 40px;
         padding-bottom: 24px;
         border-bottom: 1px solid var(--border);
+        flex-wrap: wrap;
+        gap: 12px;
       }
 
       .logo {
@@ -76,6 +272,12 @@
 
       .logo span {
         color: var(--accent);
+      }
+
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
 
       .week-badge {
@@ -91,7 +293,104 @@
         color: var(--accent);
       }
 
-      /* Grid layout */
+      /* Connection indicator */
+      .conn-indicator {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 7px 12px;
+        font-size: 0.7rem;
+        cursor: pointer;
+        transition: border-color 0.2s;
+      }
+
+      .conn-indicator:hover {
+        border-color: var(--muted);
+      }
+
+      .conn-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--muted);
+        transition: background 0.3s;
+      }
+
+      .conn-dot.connected {
+        background: var(--accent);
+        box-shadow: 0 0 6px rgba(110, 231, 183, 0.5);
+        animation: pulse 2s infinite;
+      }
+
+      .conn-dot.connecting {
+        background: var(--accent2);
+        animation: pulse 0.8s infinite;
+      }
+
+      .conn-dot.error {
+        background: var(--accent3);
+      }
+
+      @keyframes pulse {
+
+        0%,
+        100% {
+          opacity: 1;
+        }
+
+        50% {
+          opacity: 0.4;
+        }
+      }
+
+      .conn-label {
+        color: var(--muted);
+      }
+
+      /* Sync overlay */
+      #syncOverlay {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--surface2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 10px 20px;
+        font-size: 0.75rem;
+        color: var(--accent2);
+        z-index: 99;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+      }
+
+      #syncOverlay.show {
+        opacity: 1;
+      }
+
+      .spinner {
+        width: 12px;
+        height: 12px;
+        border: 2px solid rgba(245, 158, 11, 0.3);
+        border-top-color: var(--accent2);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Layout */
       .main-grid {
         display: grid;
         grid-template-columns: 320px 1fr;
@@ -99,7 +398,6 @@
         align-items: start;
       }
 
-      /* Sidebar */
       .sidebar {
         display: flex;
         flex-direction: column;
@@ -123,7 +421,6 @@
         margin-bottom: 16px;
       }
 
-      /* Form */
       .form-row {
         margin-bottom: 12px;
       }
@@ -183,6 +480,12 @@
         transform: translateY(-1px);
       }
 
+      .btn-primary:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+        transform: none;
+      }
+
       .btn-danger {
         background: transparent;
         border: 1px solid var(--accent3);
@@ -196,19 +499,6 @@
         color: #000;
       }
 
-      .btn-change {
-        background: var(--surface2);
-        border: 1px solid var(--border);
-        color: var(--accent2);
-        font-size: 0.7rem;
-        padding: 4px 8px;
-      }
-
-      .btn-change:hover {
-        border-color: var(--accent2);
-      }
-
-      /* Resource list */
       .resource-list {
         display: flex;
         flex-direction: column;
@@ -267,14 +557,12 @@
         color: var(--accent3);
       }
 
-      /* Main content */
       .content {
         display: flex;
         flex-direction: column;
         gap: 24px;
       }
 
-      /* Week navigator */
       .week-nav {
         display: flex;
         align-items: center;
@@ -299,10 +587,8 @@
         font-size: 1rem;
         flex: 1;
         text-align: center;
-        color: var(--text);
       }
 
-      /* Calendar grid */
       .calendar {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -344,7 +630,6 @@
         flex-direction: column;
         gap: 6px;
         min-height: 120px;
-        position: relative;
         transition: background 0.15s;
       }
 
@@ -366,7 +651,6 @@
         font-weight: 500;
       }
 
-      /* Resource chips in calendar */
       .chip {
         display: flex;
         align-items: center;
@@ -415,7 +699,6 @@
         opacity: 1;
       }
 
-      /* Detail panel */
       .detail-panel {
         background: var(--surface);
         border: 1px solid var(--border);
@@ -485,7 +768,6 @@
         color: var(--accent3);
       }
 
-      /* Coefficient bar */
       .coeff-track {
         background: var(--surface2);
         border: 1px solid var(--border);
@@ -529,7 +811,6 @@
         background: linear-gradient(90deg, var(--accent3), var(--accent2), var(--accent));
       }
 
-      /* Change request */
       .change-form {
         background: var(--surface2);
         border: 1px solid var(--border);
@@ -579,7 +860,6 @@
         font-weight: 600;
       }
 
-      /* History table */
       .history-table {
         width: 100%;
         border-collapse: collapse;
@@ -623,7 +903,6 @@
         color: var(--accent);
       }
 
-      /* Coefficient tooltip */
       .algo-info {
         background: var(--surface2);
         border: 1px solid var(--border);
@@ -644,7 +923,6 @@
         font-weight: 500;
       }
 
-      /* Empty state */
       .empty {
         text-align: center;
         padding: 40px 20px;
@@ -694,7 +972,6 @@
         color: var(--accent3);
       }
 
-      /* Scrollbar */
       ::-webkit-scrollbar {
         width: 6px;
         height: 6px;
@@ -718,16 +995,91 @@
   </head>
 
   <body>
+
+    <!-- ══════════════════════════════════════
+     SETUP OVERLAY
+════════════════════════════════════════ -->
+    <div id="setupOverlay">
+      <div class="setup-card">
+        <div class="setup-logo">AGILE<span>DAY</span> · Firebase Setup</div>
+        <div class="setup-subtitle">
+          Inserisci le credenziali del tuo progetto Firebase per abilitare la sincronizzazione real-time.<br><br>
+          Nuovo progetto? → <a href="https://console.firebase.google.com"
+            target="_blank">console.firebase.google.com</a>
+        </div>
+
+        <div class="setup-steps">
+          <ol>
+            <li>Crea un progetto su <span class="fb">Firebase Console</span></li>
+            <li>Vai su <span class="hl">Firestore Database</span> → crea DB in modalità test</li>
+            <li>Vai su <span class="hl">Impostazioni progetto</span> → <span class="hl">App Web</span> → copia la config
+            </li>
+            <li>Regola le <span class="hl">Firestore Rules</span>:<br>
+              <code>allow read, write: if true;</code> (solo per test!)
+            </li>
+            <li>Incolla i valori qui sotto</li>
+          </ol>
+        </div>
+
+        <div class="setup-error" id="setupError"></div>
+
+        <div class="setup-form">
+          <div class="form-row">
+            <label>API Key</label>
+            <input type="text" id="cfgApiKey" placeholder="AIzaSy..." />
+          </div>
+          <div class="form-row">
+            <label>Auth Domain</label>
+            <input type="text" id="cfgAuthDomain" placeholder="mio-progetto.firebaseapp.com" />
+          </div>
+          <div class="form-row">
+            <label>Project ID</label>
+            <input type="text" id="cfgProjectId" placeholder="mio-progetto" />
+          </div>
+          <div class="form-row">
+            <label>Storage Bucket</label>
+            <input type="text" id="cfgStorageBucket" placeholder="mio-progetto.appspot.com" />
+          </div>
+          <div class="form-row">
+            <label>Messaging Sender ID</label>
+            <input type="text" id="cfgMessagingSenderId" placeholder="123456789" />
+          </div>
+          <div class="form-row">
+            <label>App ID</label>
+            <input type="text" id="cfgAppId" placeholder="1:123...web:abc..." />
+          </div>
+          <button class="setup-btn" id="setupConnectBtn" onclick="connectFirebase()">
+            🔥 Connetti a Firebase
+          </button>
+          <button class="setup-saved-btn" id="setupSavedBtn" onclick="loadSavedConfig()" style="display:none">
+            ↩ Usa configurazione salvata
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sync indicator -->
+    <div id="syncOverlay">
+      <div class="spinner"></div> Sincronizzazione…
+    </div>
+
+    <!-- ══════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════ -->
     <div class="app">
       <header>
-        <div class="logo">My<span>DAY</span> SMART</div>
-        <div class="week-badge">Settimana corrente: <strong id="currentWeekLabel">—</strong></div>
+        <div class="logo">AGILE<span>DAY</span> MANAGER</div>
+        <div class="header-right">
+          <div class="conn-indicator" onclick="showSetup()" title="Clicca per riconfigurare">
+            <div class="conn-dot" id="connDot"></div>
+            <span class="conn-label" id="connLabel">Disconnesso</span>
+          </div>
+          <div class="week-badge">Settimana: <strong id="currentWeekLabel">—</strong></div>
+        </div>
       </header>
 
       <div class="main-grid">
-        <!-- Sidebar -->
         <div class="sidebar">
-          <!-- Add resource -->
           <div class="panel">
             <div class="panel-title">Nuova Risorsa</div>
             <div class="form-row">
@@ -752,41 +1104,36 @@
               <label>Coefficiente iniziale</label>
               <input type="number" id="inputCoeff" value="5.0" step="0.1" min="0" max="10" />
             </div>
-            <button class="btn btn-primary" onclick="addResource()">+ Aggiungi Risorsa</button>
+            <button class="btn btn-primary" id="addBtn" onclick="addResource()" disabled>+ Aggiungi Risorsa</button>
           </div>
 
-          <!-- Algorithm info -->
           <div class="panel">
             <div class="panel-title">Algoritmo</div>
             <div class="algo-info">
-              Coefficiente <span class="hl">+0.5</span> per ogni settimana senza cambio<br>
-              Coefficiente <span class="hl2">−1.5</span> per ogni cambio effettuato<br><br>
+              Coefficiente <span class="hl">+0.5</span> per settimana stabile<br>
+              Coefficiente <span class="hl2">−1.5</span> per ogni cambio<br><br>
               Range: <span class="hl">0.0 – 10.0</span><br>
-              Soglia cambio libero: <span class="hl">≥ 5.0</span>
+              Soglia cambio: <span class="hl">≥ 5.0</span>
             </div>
           </div>
 
-          <!-- Resource list -->
           <div class="panel">
             <div class="panel-title">Risorse (<span id="resCount">0</span>)</div>
             <div class="resource-list" id="resourceList">
               <div class="empty">
-                <div class="icon">👤</div>Nessuna risorsa
+                <div class="icon">🔥</div>In attesa di Firebase…
               </div>
             </div>
           </div>
         </div>
 
-        <!-- Main -->
         <div class="content">
-          <!-- Week nav -->
           <div class="week-nav">
             <button class="btn" onclick="prevWeek()">← Prec</button>
             <div class="week-label" id="weekLabel">—</div>
             <button class="btn" onclick="nextWeek()">Succ →</button>
           </div>
 
-          <!-- Calendar -->
           <div class="calendar">
             <div class="cal-header">
               <div class="cal-day-header">LUN</div>
@@ -798,10 +1145,9 @@
             <div class="cal-body" id="calBody"></div>
           </div>
 
-          <!-- Detail panel -->
           <div class="detail-panel" id="detailPanel">
             <div class="empty">
-              <div class="icon">🖱️</div>Seleziona una risorsa per vedere i dettagli
+              <div class="icon">🔥</div>Connetti Firebase per iniziare
             </div>
           </div>
         </div>
@@ -810,34 +1156,203 @@
 
     <div id="toast"></div>
 
-    <script>
-      // =====================
-      // STATE
-      // =====================
-      let state = {
-        resources: [],
-        currentWeekOffset: 0,   // 0 = this week
-        selectedId: null,
-        nextId: 1,
-      };
+    <!-- Firebase SDK v9 (compat mode → no build step needed) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
+    <script>
+      // ════════════════════════════════════════
+      // CONSTANTS
+      // ════════════════════════════════════════
       const DAYS = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì'];
       const DAYS_SHORT = ['LUN', 'MAR', 'MER', 'GIO', 'VEN'];
-      const COEFF_START = 5.0;
-      const COEFF_BONUS = 0.5;   // per settimana senza cambio
-      const COEFF_PENALTY = 1.5; // per cambio
+      const COEFF_BONUS = 0.5;
+      const COEFF_PENALTY = 1.5;
       const COEFF_MIN = 0.0;
       const COEFF_MAX = 10.0;
-      const COEFF_THRESHOLD = 5.0; // min per fare un cambio liberamente
+      const COEFF_THRESHOLD = 5.0;
+      const LS_CONFIG_KEY = 'agileFirebaseConfig';
+      const COLLECTION = 'resources';
 
-      // =====================
+      // ════════════════════════════════════════
+      // STATE
+      // ════════════════════════════════════════
+      let db = null;
+      let unsubscribe = null;
+      let state = {
+        resources: [],
+        currentWeekOffset: 0,
+        selectedId: null,
+      };
+
+      // ════════════════════════════════════════
+      // FIREBASE SETUP
+      // ════════════════════════════════════════
+      window.addEventListener('DOMContentLoaded', () => {
+        const saved = localStorage.getItem(LS_CONFIG_KEY);
+        if (saved) {
+          document.getElementById('setupSavedBtn').style.display = 'block';
+          // Pre-fill fields
+          try {
+            const cfg = JSON.parse(saved);
+            document.getElementById('cfgApiKey').value = cfg.apiKey || '';
+            document.getElementById('cfgAuthDomain').value = cfg.authDomain || '';
+            document.getElementById('cfgProjectId').value = cfg.projectId || '';
+            document.getElementById('cfgStorageBucket').value = cfg.storageBucket || '';
+            document.getElementById('cfgMessagingSenderId').value = cfg.messagingSenderId || '';
+            document.getElementById('cfgAppId').value = cfg.appId || '';
+          } catch (e) { }
+        }
+        renderWeekNav();
+        renderCalendar();
+      });
+
+      function getConfigFromForm() {
+        return {
+          apiKey: document.getElementById('cfgApiKey').value.trim(),
+          authDomain: document.getElementById('cfgAuthDomain').value.trim(),
+          projectId: document.getElementById('cfgProjectId').value.trim(),
+          storageBucket: document.getElementById('cfgStorageBucket').value.trim(),
+          messagingSenderId: document.getElementById('cfgMessagingSenderId').value.trim(),
+          appId: document.getElementById('cfgAppId').value.trim(),
+        };
+      }
+
+      async function connectFirebase() {
+        const cfg = getConfigFromForm();
+        if (!cfg.apiKey || !cfg.projectId) {
+          showSetupError('API Key e Project ID sono obbligatori.');
+          return;
+        }
+
+        const btn = document.getElementById('setupConnectBtn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Connessione…';
+        setConnStatus('connecting', 'Connessione…');
+
+        try {
+          // Clean up previous instance
+          if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+          if (firebase.apps.length) {
+            await Promise.all(firebase.apps.map(a => a.delete()));
+          }
+
+          const app = firebase.initializeApp(cfg);
+          db = firebase.firestore(app);
+
+          // Test connection with a quick read
+          await db.collection(COLLECTION).limit(1).get();
+
+          // Save config
+          localStorage.setItem(LS_CONFIG_KEY, JSON.stringify(cfg));
+
+          hideSetupError();
+          document.getElementById('setupOverlay').classList.add('hidden');
+          document.getElementById('addBtn').disabled = false;
+
+          setConnStatus('connected', `${cfg.projectId}`);
+          toast('🔥 Firebase connesso!', 'success');
+
+          startRealtimeSync();
+
+        } catch (err) {
+          btn.disabled = false;
+          btn.textContent = '🔥 Connetti a Firebase';
+          setConnStatus('error', 'Errore');
+          showSetupError(`Errore connessione: ${err.message}`);
+        }
+      }
+
+      function loadSavedConfig() {
+        const saved = localStorage.getItem(LS_CONFIG_KEY);
+        if (!saved) return;
+        connectFirebase();
+      }
+
+      function showSetup() {
+        document.getElementById('setupOverlay').classList.remove('hidden');
+      }
+
+      function showSetupError(msg) {
+        const el = document.getElementById('setupError');
+        el.textContent = msg;
+        el.classList.add('show');
+      }
+
+      function hideSetupError() {
+        document.getElementById('setupError').classList.remove('show');
+      }
+
+      // ════════════════════════════════════════
+      // REAL-TIME SYNC
+      // ════════════════════════════════════════
+      function startRealtimeSync() {
+        if (unsubscribe) unsubscribe();
+
+        unsubscribe = db.collection(COLLECTION)
+          .orderBy('createdAt', 'asc')
+          .onSnapshot(
+            snapshot => {
+              state.resources = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                // Firestore stores plain objects; ensure nested objects exist
+                schedule: doc.data().schedule || {},
+                changes: doc.data().changes || {},
+              }));
+              render();
+              hideSyncOverlay();
+            },
+            err => {
+              console.error('Firestore error:', err);
+              setConnStatus('error', 'Errore sync');
+              toast('Errore sincronizzazione Firebase', 'error');
+            }
+          );
+      }
+
+      // ════════════════════════════════════════
+      // FIRESTORE OPERATIONS
+      // ════════════════════════════════════════
+      async function fsAddResource(resource) {
+        showSyncOverlay();
+        try {
+          await db.collection(COLLECTION).add(resource);
+        } catch (e) {
+          toast('Errore salvataggio: ' + e.message, 'error');
+          hideSyncOverlay();
+        }
+      }
+
+      async function fsUpdateResource(id, data) {
+        showSyncOverlay();
+        try {
+          await db.collection(COLLECTION).doc(id).update(data);
+        } catch (e) {
+          toast('Errore aggiornamento: ' + e.message, 'error');
+          hideSyncOverlay();
+        }
+      }
+
+      async function fsDeleteResource(id) {
+        showSyncOverlay();
+        try {
+          await db.collection(COLLECTION).doc(id).delete();
+        } catch (e) {
+          toast('Errore eliminazione: ' + e.message, 'error');
+          hideSyncOverlay();
+        }
+      }
+
+      // ════════════════════════════════════════
       // WEEK UTILS
-      // =====================
+      // ════════════════════════════════════════
       function getWeekStart(offset = 0) {
         const now = new Date();
-        const day = now.getDay(); // 0=Dom
+        const day = now.getDay();
         const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-        const mon = new Date(now.setDate(diff));
+        const mon = new Date(now);
+        mon.setDate(diff);
         mon.setHours(0, 0, 0, 0);
         mon.setDate(mon.getDate() + offset * 7);
         return mon;
@@ -865,6 +1380,17 @@
         return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
       }
 
+      function weekKeyForOffset(offset) {
+        const now = new Date();
+        const day = now.getDay();
+        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+        const base = new Date(now);
+        base.setDate(diff);
+        base.setHours(0, 0, 0, 0);
+        base.setDate(base.getDate() + offset * 7);
+        return `${base.getFullYear()}-W${String(getWeekNumber(base)).padStart(2, '0')}`;
+      }
+
       function formatDate(d) {
         return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
       }
@@ -874,29 +1400,19 @@
         return d.getDate() === t.getDate() && d.getMonth() === t.getMonth() && d.getFullYear() === t.getFullYear();
       }
 
-      // =====================
+      // ════════════════════════════════════════
       // RESOURCE HELPERS
-      // =====================
-      function getResource(id) {
-        return state.resources.find(r => r.id === id);
-      }
+      // ════════════════════════════════════════
+      function getResource(id) { return state.resources.find(r => r.id === id); }
 
-      // Get the agile day for a resource in a given week
       function getAgileDay(resource, wKey) {
-        if (resource.schedule[wKey] !== undefined) return resource.schedule[wKey];
-        return resource.baseDay;
+        return resource.schedule[wKey] !== undefined ? resource.schedule[wKey] : resource.baseDay;
       }
 
-      // Check if a change happened this week
-      function isChanged(resource, wKey) {
-        if (resource.changes[wKey] === undefined) return false;
-        return resource.changes[wKey];
-      }
+      function isChanged(resource, wKey) { return !!resource.changes[wKey]; }
 
-      // Apply weekly coefficient updates up to current week
       function getCoeffAtWeek(resource, targetOffset) {
-        // Replay history from week 0 (creation week) to targetOffset
-        let coeff = resource.coeff0; // initial coeff at creation
+        let coeff = resource.coeff0;
         const startOffset = resource.createdWeekOffset;
         for (let w = startOffset; w <= targetOffset; w++) {
           const wk = weekKeyForOffset(w);
@@ -907,18 +1423,6 @@
           }
         }
         return Math.round(coeff * 10) / 10;
-      }
-
-      function weekKeyForOffset(offset) {
-        // recalculate from absolute date
-        const now = new Date();
-        const day = now.getDay();
-        const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-        const base = new Date(now);
-        base.setDate(diff);
-        base.setHours(0, 0, 0, 0);
-        base.setDate(base.getDate() + offset * 7);
-        return `${base.getFullYear()}-W${String(getWeekNumber(base)).padStart(2, '0')}`;
       }
 
       function coeffClass(c) {
@@ -933,10 +1437,12 @@
         return 'red';
       }
 
-      // =====================
-      // ACTIONS
-      // =====================
-      function addResource() {
+      // ════════════════════════════════════════
+      // ACTIONS → Firestore
+      // ════════════════════════════════════════
+      async function addResource() {
+        if (!db) { toast('Prima connetti Firebase', 'error'); return; }
+
         const name = document.getElementById('inputName').value.trim();
         const role = document.getElementById('inputRole').value.trim();
         const baseDay = parseInt(document.getElementById('inputBaseDay').value);
@@ -945,29 +1451,27 @@
         if (!name) { toast('Inserisci un nome', 'warning'); return; }
 
         const resource = {
-          id: state.nextId++,
           name,
           role: role || 'Team Member',
           baseDay,
           coeff0: Math.min(COEFF_MAX, Math.max(COEFF_MIN, coeff0)),
           createdWeekOffset: state.currentWeekOffset,
-          schedule: {},   // wKey -> dayIndex (only when changed)
-          changes: {},    // wKey -> true when change happened
+          schedule: {},
+          changes: {},
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         };
 
-        state.resources.push(resource);
         document.getElementById('inputName').value = '';
         document.getElementById('inputRole').value = '';
 
+        await fsAddResource(resource);
         toast(`${name} aggiunto/a ✓`, 'success');
-        render();
       }
 
-      function removeResource(id) {
-        state.resources = state.resources.filter(r => r.id !== id);
+      async function removeResource(id) {
         if (state.selectedId === id) state.selectedId = null;
+        await fsDeleteResource(id);
         toast('Risorsa rimossa', 'warning');
-        render();
       }
 
       function selectResource(id) {
@@ -975,13 +1479,13 @@
         render();
       }
 
-      function requestChange(id, newDay) {
+      async function requestChange(id, newDay) {
         const resource = getResource(id);
         const wKey = weekKey(state.currentWeekOffset);
         const coeff = getCoeffAtWeek(resource, state.currentWeekOffset);
 
         if (coeff < COEFF_THRESHOLD) {
-          toast(`Coefficiente troppo basso (${coeff}). Minimo richiesto: ${COEFF_THRESHOLD}`, 'error');
+          toast(`Coefficiente troppo basso (${coeff}). Minimo: ${COEFF_THRESHOLD}`, 'error');
           return;
         }
 
@@ -991,32 +1495,35 @@
           return;
         }
 
-        // Apply change
-        resource.schedule[wKey] = newDay;
-        resource.changes[wKey] = true;
+        const updatedSchedule = { ...resource.schedule, [wKey]: newDay };
+        const updatedChanges = { ...resource.changes, [wKey]: true };
 
+        await fsUpdateResource(id, { schedule: updatedSchedule, changes: updatedChanges });
         toast(`Cambio approvato → ${DAYS[newDay]} (−${COEFF_PENALTY} coeff)`, 'warning');
-        render();
       }
 
-      function removeChange(id) {
+      async function removeChange(id) {
         const wKey = weekKey(state.currentWeekOffset);
         const resource = getResource(id);
-        delete resource.schedule[wKey];
-        delete resource.changes[wKey];
+
+        const updatedSchedule = { ...resource.schedule };
+        const updatedChanges = { ...resource.changes };
+        delete updatedSchedule[wKey];
+        delete updatedChanges[wKey];
+
+        await fsUpdateResource(id, { schedule: updatedSchedule, changes: updatedChanges });
         toast('Cambio annullato', 'warning');
-        render();
       }
 
-      // =====================
+      // ════════════════════════════════════════
       // NAVIGATION
-      // =====================
+      // ════════════════════════════════════════
       function prevWeek() { state.currentWeekOffset--; render(); }
       function nextWeek() { state.currentWeekOffset++; render(); }
 
-      // =====================
+      // ════════════════════════════════════════
       // RENDER
-      // =====================
+      // ════════════════════════════════════════
       function render() {
         renderWeekNav();
         renderResourceList();
@@ -1038,7 +1545,9 @@
         document.getElementById('resCount').textContent = state.resources.length;
 
         if (!state.resources.length) {
-          el.innerHTML = '<div class="empty"><div class="icon">👤</div>Nessuna risorsa</div>';
+          el.innerHTML = db
+            ? '<div class="empty"><div class="icon">👤</div>Nessuna risorsa</div>'
+            : '<div class="empty"><div class="icon">🔥</div>In attesa di Firebase…</div>';
           return;
         }
 
@@ -1047,7 +1556,7 @@
           const wKey = weekKey(state.currentWeekOffset);
           const changed = isChanged(r, wKey);
           return `
-      <div class="resource-item ${state.selectedId === r.id ? 'active' : ''}" onclick="selectResource(${r.id})">
+      <div class="resource-item ${state.selectedId === r.id ? 'active' : ''}" onclick="selectResource('${r.id}')">
         <div>
           <div class="resource-name">${r.name}</div>
           <div style="font-size:0.65rem;color:var(--muted);margin-top:2px">${r.role}</div>
@@ -1055,7 +1564,7 @@
         <div class="resource-meta">
           ${changed ? '<span style="font-size:0.65rem;color:var(--accent2)">⇄</span>' : ''}
           <span class="coeff-badge ${coeffClass(coeff)}">${coeff.toFixed(1)}</span>
-          <button class="btn btn-danger" onclick="event.stopPropagation();removeResource(${r.id})">✕</button>
+          <button class="btn btn-danger" onclick="event.stopPropagation();removeResource('${r.id}')">✕</button>
         </div>
       </div>
     `;
@@ -1067,7 +1576,6 @@
         const wKey = weekKey(state.currentWeekOffset);
         const calBody = document.getElementById('calBody');
 
-        // Build day -> resources map
         const dayResources = Array.from({ length: 5 }, () => []);
         state.resources.forEach(r => {
           const agileDay = getAgileDay(r, wKey);
@@ -1080,7 +1588,7 @@
           const chips = dayResources[i].map(({ r, changed }) => `
       <div class="chip ${changed ? 'chip-changed' : 'chip-agile'}">
         <span>${r.name.split(' ')[0]}</span>
-        ${changed ? `<span class="chip-remove" onclick="removeChange(${r.id})" title="Annulla cambio">×</span>` : ''}
+        ${changed ? `<span class="chip-remove" onclick="removeChange('${r.id}')" title="Annulla cambio">×</span>` : ''}
       </div>
     `).join('');
 
@@ -1096,12 +1604,12 @@
       function renderDetail() {
         const el = document.getElementById('detailPanel');
         if (!state.selectedId) {
-          el.innerHTML = '<div class="empty"><div class="icon">🖱️</div>Seleziona una risorsa per vedere i dettagli</div>';
+          el.innerHTML = '<div class="empty"><div class="icon">🖱️</div>Seleziona una risorsa</div>';
           return;
         }
 
         const r = getResource(state.selectedId);
-        if (!r) return;
+        if (!r) { state.selectedId = null; renderDetail(); return; }
 
         const wKey = weekKey(state.currentWeekOffset);
         const coeff = getCoeffAtWeek(r, state.currentWeekOffset);
@@ -1109,11 +1617,8 @@
         const currentAgile = getAgileDay(r, wKey);
         const changed = isChanged(r, wKey);
         const canChange = coeff >= COEFF_THRESHOLD;
-
-        // Count total changes
         const totalChanges = Object.values(r.changes).filter(Boolean).length;
 
-        // Build history (last 8 weeks)
         let historyRows = '';
         for (let wo = r.createdWeekOffset; wo <= state.currentWeekOffset; wo++) {
           const wk = weekKeyForOffset(wo);
@@ -1133,7 +1638,7 @@
 
         const daysBtns = DAYS.map((day, i) => `
     <button class="day-btn ${currentAgile === i && !changed ? 'selected' : ''} ${changed && r.schedule[wKey] === i ? 'selected' : ''}"
-      onclick="requestChange(${r.id}, ${i})"
+      onclick="requestChange('${r.id}', ${i})"
       ${i === currentAgile && !changed ? 'disabled title="Giorno attuale"' : ''}>
       ${DAYS_SHORT[i]}
     </button>
@@ -1144,6 +1649,7 @@
       <div>
         <div class="detail-name">${r.name}</div>
         <div class="detail-role">${r.role} · Giorno base: ${DAYS[r.baseDay]}</div>
+        <div style="font-size:0.6rem;color:var(--muted);margin-top:4px">ID: ${r.id}</div>
       </div>
       <div style="text-align:right">
         <div style="font-size:0.65rem;color:var(--muted)">Oggi agile</div>
@@ -1184,7 +1690,7 @@
     <div class="change-form">
       <div class="change-form-title">Richiedi Cambio Giorno (Settimana Corrente)</div>
       <div class="days-selector">${daysBtns}</div>
-      ${changed ? `<button class="btn btn-danger" onclick="removeChange(${r.id})">✕ Annulla cambio settimana corrente</button>` : ''}
+      ${changed ? `<button class="btn btn-danger" onclick="removeChange('${r.id}')">✕ Annulla cambio settimana corrente</button>` : ''}
       ${!canChange ? `<div style="font-size:0.7rem;color:var(--accent3);margin-top:8px">⚠ Coefficiente insufficiente. Minimo: ${COEFF_THRESHOLD}</div>` : ''}
     </div>
 
@@ -1200,43 +1706,39 @@
   `;
       }
 
-      // =====================
-      // TOAST
-      // =====================
+      // ════════════════════════════════════════
+      // UI HELPERS
+      // ════════════════════════════════════════
+      function setConnStatus(status, label) {
+        const dot = document.getElementById('connDot');
+        const lbl = document.getElementById('connLabel');
+        dot.className = 'conn-dot ' + status;
+        lbl.textContent = label;
+      }
+
+      let syncTimer;
+      function showSyncOverlay() {
+        clearTimeout(syncTimer);
+        document.getElementById('syncOverlay').classList.add('show');
+      }
+      function hideSyncOverlay() {
+        syncTimer = setTimeout(() => {
+          document.getElementById('syncOverlay').classList.remove('show');
+        }, 400);
+      }
+
       let toastTimer;
       function toast(msg, type = 'success') {
         const el = document.getElementById('toast');
         el.textContent = msg;
         el.className = `show ${type}`;
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => { el.className = ''; }, 3000);
+        toastTimer = setTimeout(() => { el.className = ''; }, 3200);
       }
 
-      // =====================
-      // INIT
-      // =====================
-      render();
-    </script>
-
-    <!--Firebase-->
-    <script type="module">
-      // Import the functions you need from the SDKs you need
-      import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-      // TODO: Add SDKs for Firebase products that you want to use
-      // https://firebase.google.com/docs/web/setup#available-libraries
-
-      // Your web app's Firebase configuration
-      const firebaseConfig = {
-        apiKey: "AIzaSyCR2D56x8_fO37BgIWAnoHNp1e6XMu2uVc",
-        authDomain: "mysmart-uobda.firebaseapp.com",
-        projectId: "mysmart-uobda",
-        storageBucket: "mysmart-uobda.firebasestorage.app",
-        messagingSenderId: "185233507570",
-        appId: "1:185233507570:web:8956b729174d855252bc6b"
-      };
-
-      // Initialize Firebase
-      const app = initializeApp(firebaseConfig);
+      // Initial render
+      renderWeekNav();
+      renderCalendar();
     </script>
   </body>
 
