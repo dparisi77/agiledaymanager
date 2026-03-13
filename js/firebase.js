@@ -265,6 +265,61 @@ const FirebaseService = (() => {
     document.getElementById('setupError')?.classList.add('d-none');
   }
 
+  // ── USER COLLECTION ──────────────────────────────────────
+
+  const USERS_COLL = 'users';
+
+  /**
+   * Query users by username (case-sensitive exact match).
+   * @param {string} username
+   * @returns {Promise<firebase.firestore.QuerySnapshot>}
+   */
+  async function queryUsers(username) {
+    _ensureConnected();
+    return _db.collection(USERS_COLL).where('username', '==', username).get();
+  }
+
+  /**
+   * Get all users (for admin user management panel).
+   * @returns {Promise<Object[]>}  array of {id, ...data}
+   */
+  async function getAllUsers() {
+    _ensureConnected();
+    const snap = await _db.collection(USERS_COLL).orderBy('createdAt', 'asc').get();
+    return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }
+
+  /**
+   * Add a new user document.
+   * @param {Object} data
+   */
+  async function addUser(data) {
+    _ensureConnected();
+    await _db.collection(USERS_COLL).add({
+      ...data,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+  }
+
+  /**
+   * Update a user document.
+   * @param {string} id
+   * @param {Object} data
+   */
+  async function updateUserDoc(id, data) {
+    _ensureConnected();
+    await _db.collection(USERS_COLL).doc(id).update(data);
+  }
+
+  /**
+   * Delete a user document.
+   * @param {string} id
+   */
+  async function deleteUserDoc(id) {
+    _ensureConnected();
+    await _db.collection(USERS_COLL).doc(id).delete();
+  }
+
   // ── PUBLIC API ───────────────────────────────────────────
   return {
     showSetupModal,
@@ -278,6 +333,13 @@ const FirebaseService = (() => {
     addResource,
     updateResource,
     deleteResource,
+    // users
+    queryUsers,
+    getAllUsers,
+    addUser,
+    updateUserDoc,
+    deleteUserDoc,
+    // ui
     setConnected,
     setConnecting,
     setError,
