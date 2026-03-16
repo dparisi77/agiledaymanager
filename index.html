@@ -420,12 +420,15 @@
 
     <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Firebase Compat SDK (stable, widely tested) -->
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
     <!-- Firebase configuration (local file, not in version control) -->
     <script src="firebase-config.js"></script>
 
+    <!-- Application modules -->
     <script src="js/utils.js"></script>
     <script src="js/firebase.js"></script>
     <script src="js/auth.js"></script>
@@ -435,13 +438,18 @@
     <script>
       // Wire login/app shell visibility to auth state
       document.addEventListener('DOMContentLoaded', () => {
+        console.log('=== AGILE DAY MANAGER INIT ===');
+        console.log('FirebaseService available?', typeof FirebaseService !== 'undefined');
+        console.log('Auth available?', typeof Auth !== 'undefined');
+        console.log('App available?', typeof App !== 'undefined');
+
         Auth.onAuthChange(session => {
           const loginView = document.getElementById('loginView');
           const appShell = document.getElementById('appShell');
           if (session) {
             loginView?.classList.add('d-none');
             appShell?.classList.remove('d-none');
-            // Pre-fill setup form if saved or if config file is available
+
             if (FirebaseService.hasSavedConfig()) {
               FirebaseService.prefillFormFromStorage();
               document.getElementById('setupSavedBtn')?.classList.remove('d-none');
@@ -455,10 +463,8 @@
         });
 
         // Initialize app
-        if (typeof App !== 'undefined' && typeof App.init === 'function') {
+        if (App.init && typeof App.init === 'function') {
           App.init();
-        } else {
-          console.error('App.init is not available');
         }
       });
     </script>

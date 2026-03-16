@@ -1,0 +1,31 @@
+{
+  "name": "agile_manager",
+  "version": "1.0.0",
+  "description": "Una **applicazione web moderna** per la pianificazione e gestione delle risorse nei team agile, con sincronizzazione real-time basata su **Firebase Firestore**.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://davide_parisi@bitbucket.org/apex-dev-std/agiledaymanager.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://bitbucket.org/apex-dev-std/agiledaymanager/issues"
+  },
+  "homepage": "https://bitbucket.org/apex-dev-std/agiledaymanager#readme",
+  "devDependencies": {
+    "vite": "^8.0.0"
+  },
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "firebase": "^12.10.0"
+  }
+}

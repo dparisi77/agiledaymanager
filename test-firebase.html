@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="it">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Firebase Connection Test</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                padding: 20px;
+            }
+
+            .test {
+                margin: 10px 0;
+                padding: 10px;
+                border: 1px solid #ccc;
+            }
+
+            .pass {
+                background: #d4edda;
+                color: #155724;
+            }
+
+            .fail {
+                background: #f8d7da;
+                color: #721c24;
+            }
+
+            code {
+                background: #f5f5f5;
+                padding: 2px 6px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <h1>Firebase Connection Test</h1>
+        <div id="results"></div>
+
+        <!-- Load firebase config and modules -->
+        <script src="firebase-config.js"></script>
+        <script src="js/utils.js"></script>
+        <script src="js/firebase.js"></script>
+        <script src="js/auth.js"></script>
+
+        <script>
+            const results = document.getElementById('results');
+
+            function addTest(name, passed, details = '') {
+                const div = document.createElement('div');
+                div.className = 'test ' + (passed ? 'pass' : 'fail');
+                div.innerHTML = `<strong>${passed ? '✓' : '✗'} ${name}</strong>${details ? '<br>' + details : ''}`;
+                results.appendChild(div);
+            }
+
+            // Test 1: Check modules loaded
+            addTest('Utils module loaded', typeof Utils !== 'undefined');
+            addTest('FirebaseService module loaded', typeof FirebaseService !== 'undefined');
+            addTest('Auth module loaded', typeof Auth !== 'undefined');
+            addTest('FIREBASE_CONFIG available', typeof FIREBASE_CONFIG !== 'undefined',
+                `projectId: ${FIREBASE_CONFIG?.projectId}`);
+
+            // Test 2: Check FirebaseService methods
+            const fsMethods = ['connect', 'connectFromForm', 'hasSavedConfig', 'isConnected', 'queryUsers'];
+            fsMethods.forEach(method => {
+                addTest(`FirebaseService.${method} exists`, typeof FirebaseService[method] === 'function');
+            });
+
+            // Test 3: Try loading Firebase modules dynamically
+            document.addEventListener('DOMContentLoaded', async () => {
+                try {
+                    const { initializeApp } = await import('firebase/app');
+                    addTest('Firebase SDK modules loadable', true, 'ES6 dynamic import successful');
+                } catch (err) {
+                    addTest('Firebase SDK modules loadable', false, `Error: ${err.message}`);
+                }
+
+                // Test 4: Try Firebase connection with config file
+                try {
+                    FirebaseService.setConnecting();
+                    await FirebaseService.connect(FIREBASE_CONFIG, () => { });
+                    addTest('Firebase connection possible', true, 'Connected successfully');
+                    addTest('Firestore connected', FirebaseService.isConnected(), 'isConnected() returned true');
+                } catch (err) {
+                    addTest('Firebase connection possible', false, `Error: ${err.message}`);
+                }
+            });
+        </script>
+    </body>
+
+</html>

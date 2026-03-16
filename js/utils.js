@@ -2,71 +2,74 @@
  * utils.js — Agile Day Manager
  * Pure utility functions: date/week helpers, coefficient algorithm,
  * category helpers, formatting. No side-effects, no DOM access.
+ * Now using date-fns for robust date operations.
  */
 
+import {
+  startOfWeek,
+  endOfWeek,
+  addDays,
+  eachDayOfInterval,
+  getISOWeek,
+  getYear,
+  format as formatDate_fn,
+  isToday as isToday_fn,
+  addWeeks,
+} from "date-fns";
+
 const Utils = (() => {
-
   // ── CONSTANTS ────────────────────────────────────────────
-  const DAYS       = ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì'];
-  const DAYS_SHORT = ['LUN','MAR','MER','GIO','VEN'];
+  const DAYS = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì"];
+  const DAYS_SHORT = ["LUN", "MAR", "MER", "GIO", "VEN"];
 
-  const COEFF_BONUS     = 0.5;
-  const COEFF_PENALTY   = 1.5;
-  const COEFF_MIN       = 0.0;
-  const COEFF_MAX       = 10.0;
+  const COEFF_BONUS = 0.5;
+  const COEFF_PENALTY = 1.5;
+  const COEFF_MIN = 0.0;
+  const COEFF_MAX = 10.0;
   const COEFF_THRESHOLD = 5.0;
 
   const CATEGORIES = [
-    { value: 'Developer', label: '💻 Developer', css: 'Developer' },
-    { value: 'SysAdmin',  label: '🖥️ SysAdmin',  css: 'SysAdmin'  },
-    { value: 'HelpDesk',  label: '🎧 HelpDesk',  css: 'HelpDesk'  },
-    { value: 'DBA',       label: '🗄️ DBA',       css: 'DBA'       },
-    { value: 'Manager',   label: '📋 Manager',   css: 'Manager'   },
+    { value: "Developer", label: "💻 Developer", css: "Developer" },
+    { value: "SysAdmin", label: "🖥️ SysAdmin", css: "SysAdmin" },
+    { value: "HelpDesk", label: "🎧 HelpDesk", css: "HelpDesk" },
+    { value: "DBA", label: "🗄️ DBA", css: "DBA" },
+    { value: "Manager", label: "📋 Manager", css: "Manager" },
   ];
 
   // ── WEEK HELPERS ─────────────────────────────────────────
 
   /**
    * Returns the Monday Date of the week at `offset` weeks from today.
+   * Uses date-fns startOfWeek for robust date handling.
    * @param {number} offset
    * @returns {Date}
    */
   function getWeekStart(offset = 0) {
-    const now  = new Date();
-    const day  = now.getDay(); // 0 = Sun
-    const diff = now.getDate() - day + (day === 0 ? -6 : 1);
-    const mon  = new Date(now);
-    mon.setDate(diff);
-    mon.setHours(0, 0, 0, 0);
-    mon.setDate(mon.getDate() + offset * 7);
-    return mon;
+    const today = new Date();
+    const monday = startOfWeek(today, { weekStartsOn: 1 }); // 1 = Monday
+    return addWeeks(monday, offset);
   }
 
   /**
    * Returns an array of 5 Date objects (Mon–Fri) for the given week offset.
+   * Uses date-fns eachDayOfInterval.
    * @param {number} offset
    * @returns {Date[]}
    */
   function getWeekDates(offset = 0) {
     const mon = getWeekStart(offset);
-    return Array.from({ length: 5 }, (_, i) => {
-      const d = new Date(mon);
-      d.setDate(mon.getDate() + i);
-      return d;
-    });
+    const fri = addDays(mon, 4);
+    return eachDayOfInterval({ start: mon, end: fri });
   }
 
   /**
    * ISO week number (1-53) for a given Date.
+   * Uses date-fns getISOWeek for standard ISO week numbering.
    * @param {Date} d
    * @returns {number}
    */
   function getWeekNumber(d) {
-    const date   = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const dayNum = date.getUTCDay() || 7;
-    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
-    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-    return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    return getISOWeek(d);
   }
 
   /**
@@ -75,9 +78,11 @@ const Utils = (() => {
    * @returns {string}
    */
   function weekKey(offset = 0) {
-    const d  = getWeekStart(offset);
-    const wn = String(getWeekNumber(d)).padStart(2, '0');
-    return `${d.getFullYear()}-W${wn}`;
+    const d = getWeekStart(offset);
+    const year = getYear(d);
+    const week = getISOWeek(d);
+    const wn = String(week).padStart(2, "0");
+    return `${year}-W${wn}`;
   }
 
   /**
@@ -89,26 +94,22 @@ const Utils = (() => {
   const weekKeyForOffset = weekKey;
 
   /**
-   * Format a Date as "DD/MM".
+   * Format a Date as "DD/MM" using date-fns.
    * @param {Date} d
    * @returns {string}
    */
   function formatDate(d) {
-    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+    return formatDate_fn(d, "dd/MM");
   }
 
   /**
    * True if Date d is today.
+   * Uses date-fns isToday for reliable comparison.
    * @param {Date} d
    * @returns {boolean}
    */
   function isToday(d) {
-    const t = new Date();
-    return (
-      d.getDate()     === t.getDate()  &&
-      d.getMonth()    === t.getMonth() &&
-      d.getFullYear() === t.getFullYear()
-    );
+    return isToday_fn(d);
   }
 
   // ── RESOURCE HELPERS ─────────────────────────────────────
@@ -171,9 +172,9 @@ const Utils = (() => {
    * @returns {'high'|'mid'|'low'}
    */
   function coeffLevel(c) {
-    if (c >= 7) return 'high';
-    if (c >= 4) return 'mid';
-    return 'low';
+    if (c >= 7) return "high";
+    if (c >= 4) return "mid";
+    return "low";
   }
 
   /**
@@ -182,9 +183,9 @@ const Utils = (() => {
    * @returns {'green'|'amber'|'red'}
    */
   function coeffColor(c) {
-    if (c >= 7) return 'green';
-    if (c >= 4) return 'amber';
-    return 'red';
+    if (c >= 7) return "green";
+    if (c >= 4) return "amber";
+    return "red";
   }
 
   /**
@@ -193,7 +194,7 @@ const Utils = (() => {
    * @returns {Object|undefined}
    */
   function getCategory(value) {
-    return CATEGORIES.find(c => c.value === value);
+    return CATEGORIES.find((c) => c.value === value);
   }
 
   // ── PUBLIC API ───────────────────────────────────────────
@@ -223,5 +224,4 @@ const Utils = (() => {
     coeffColor,
     getCategory,
   };
-
 })();

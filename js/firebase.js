@@ -2,14 +2,16 @@
  * firebase.js — Agile Day Manager
  * Handles Firebase initialization, Firestore CRUD,
  * real-time listener, and connection UI state.
- * Depends on: utils.js (loaded first), Firebase compat SDK (CDN).
+ * Uses Firebase Compat SDK (via CDN) for stability.
  */
 
 const FirebaseService = (() => {
   // ── INTERNAL STATE ───────────────────────────────────────
   const LS_CONFIG_KEY = "agileFirebaseConfig";
   const COLLECTION = "resources";
+  const USERS_COLL = "users";
 
+  let _app = null;
   let _db = null;
   let _unsubscribe = null;
   let _onDataCb = null; // called on every Firestore snapshot
@@ -17,7 +19,6 @@ const FirebaseService = (() => {
 
   // ── SETUP MODAL ──────────────────────────────────────────
 
-  /** Show the Firebase setup modal. */
   function showSetupModal() {
     const el = document.getElementById("setupModal");
     if (!el) return;
@@ -25,7 +26,6 @@ const FirebaseService = (() => {
     modal.show();
   }
 
-  /** Hide the Firebase setup modal. */
   function hideSetupModal() {
     const el = document.getElementById("setupModal");
     if (!el) return;
@@ -33,7 +33,6 @@ const FirebaseService = (() => {
     if (modal) modal.hide();
   }
 
-  /** Pre-fill the setup form from saved localStorage config. */
   function prefillFormFromStorage() {
     const saved = localStorage.getItem(LS_CONFIG_KEY);
     if (!saved) return false;
@@ -52,7 +51,6 @@ const FirebaseService = (() => {
     }
   }
 
-  /** Pre-fill the setup form from firebase-config.js file. */
   function prefillFormFromFile() {
     if (typeof FIREBASE_CONFIG === "undefined") return false;
 
@@ -74,7 +72,6 @@ const FirebaseService = (() => {
     if (el && value) el.value = value;
   }
 
-  /** Read config values from the setup form. */
   function _readConfigFromForm() {
     return {
       apiKey: _val("cfgApiKey"),
@@ -93,12 +90,6 @@ const FirebaseService = (() => {
 
   // ── CONNECTION ───────────────────────────────────────────
 
-  /**
-   * Initialize Firebase with the given config and start Firestore listener.
-   * @param {Object} cfg  Firebase config object
-   * @param {Function} onData  Callback(resources[]) invoked on each snapshot
-   * @returns {Promise<void>}
-   */
   async function connect(cfg, onData) {
     if (!cfg.apiKey || !cfg.projectId) {
       throw new Error("API Key e Project ID sono obbligatori.");
@@ -111,15 +102,19 @@ const FirebaseService = (() => {
       _unsubscribe();
       _unsubscribe = null;
     }
-    if (firebase.apps.length) {
+    if (firebase.apps.length > 0) {
       await Promise.all(firebase.apps.map((a) => a.delete()));
     }
 
-    const app = firebase.initializeApp(cfg);
-    _db = firebase.firestore(app);
+    _app = firebase.initializeApp(cfg);
+    _db = firebase.firestore(_app);
 
     // Test connection
-    await _db.collection(COLLECTION).limit(1).get();
+    try {
+      await _db.collection(COLLECTION).limit(1).get();
+    } catch (err) {
+      throw new Error("Connessione a Firestore fallita: " + err.message);
+    }
 
     // Persist config
     localStorage.setItem(LS_CONFIG_KEY, JSON.stringify(cfg));
@@ -127,13 +122,11 @@ const FirebaseService = (() => {
     _startListener();
   }
 
-  /** Connect using the current form values. */
   async function connectFromForm(onData) {
     const cfg = _readConfigFromForm();
     await connect(cfg, onData);
   }
 
-  /** Connect using the saved localStorage config. */
   async function connectFromStorage(onData) {
     const saved = localStorage.getItem(LS_CONFIG_KEY);
     if (!saved) throw new Error("Nessuna configurazione salvata.");
@@ -141,23 +134,16 @@ const FirebaseService = (() => {
     await connect(cfg, onData);
   }
 
-  /** True if a saved config exists in localStorage. */
   function hasSavedConfig() {
     return !!localStorage.getItem(LS_CONFIG_KEY);
   }
 
-  /** True if Firestore is initialized. */
   function isConnected() {
     return _db !== null;
   }
 
-  /**
-   * Update the data callback and restart the listener.
-   * Used when Firebase is already connected but the callback needs to change.
-   * @param {Function} onData  Callback(resources[]) invoked on each snapshot
-   */
   function setDataCallback(onData) {
-    if (!_db) return; // Not connected
+    if (!_db) return;
     _onDataCb = onData;
     _startListener();
   }
@@ -172,11 +158,11 @@ const FirebaseService = (() => {
       .orderBy("createdAt", "asc")
       .onSnapshot(
         (snapshot) => {
-          const resources = snapshot.docs.map((doc) => ({
-            id: doc.id,
-            ...doc.data(),
-            schedule: doc.data().schedule || {},
-            changes: doc.data().changes || {},
+          const resources = snapshot.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+            schedule: docSnap.data().schedule || {},
+            changes: docSnap.data().changes || {},
           }));
           if (_onDataCb) _onDataCb(resources);
           _hideSyncOverlay();
@@ -191,11 +177,6 @@ const FirebaseService = (() => {
 
   // ── FIRESTORE CRUD ───────────────────────────────────────
 
-  /**
-   * Add a new resource document.
-   * @param {Object} data
-   * @returns {Promise<string>}  new document id
-   */
   async function addResource(data) {
     _ensureConnected();
     _showSyncOverlay();
@@ -212,11 +193,6 @@ const FirebaseService = (() => {
     }
   }
 
-  /**
-   * Update specific fields on a resource document.
-   * @param {string} id
-   * @param {Object} data
-   */
   async function updateResource(id, data) {
     _ensureConnected();
     _showSyncOverlay();
@@ -229,10 +205,6 @@ const FirebaseService = (() => {
     }
   }
 
-  /**
-   * Delete a resource document.
-   * @param {string} id
-   */
   async function deleteResource(id) {
     _ensureConnected();
     _showSyncOverlay();
@@ -269,17 +241,14 @@ const FirebaseService = (() => {
     if (lbl) lbl.textContent = label;
   }
 
-  /** Update connection indicator to "connected" state. */
   function setConnected(projectId) {
     _setConnStatus("connected", projectId || "Connesso");
   }
 
-  /** Update connection indicator to "connecting" state. */
   function setConnecting() {
     _setConnStatus("connecting", "Connessione…");
   }
 
-  /** Update connection indicator to "error" state. */
   function setError() {
     _setConnStatus("error", "Errore");
   }
@@ -299,35 +268,20 @@ const FirebaseService = (() => {
 
   // ── USER COLLECTION ──────────────────────────────────────
 
-  const USERS_COLL = "users";
-
-  /**
-   * Query users by username (case-sensitive exact match).
-   * @param {string} username
-   * @returns {Promise<firebase.firestore.QuerySnapshot>}
-   */
   async function queryUsers(username) {
     _ensureConnected();
     return _db.collection(USERS_COLL).where("username", "==", username).get();
   }
 
-  /**
-   * Get all users (for admin user management panel).
-   * @returns {Promise<Object[]>}  array of {id, ...data}
-   */
   async function getAllUsers() {
     _ensureConnected();
     const snap = await _db
       .collection(USERS_COLL)
       .orderBy("createdAt", "asc")
       .get();
-    return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    return snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
   }
 
-  /**
-   * Add a new user document.
-   * @param {Object} data
-   */
   async function addUser(data) {
     _ensureConnected();
     await _db.collection(USERS_COLL).add({
@@ -336,20 +290,11 @@ const FirebaseService = (() => {
     });
   }
 
-  /**
-   * Update a user document.
-   * @param {string} id
-   * @param {Object} data
-   */
   async function updateUserDoc(id, data) {
     _ensureConnected();
     await _db.collection(USERS_COLL).doc(id).update(data);
   }
 
-  /**
-   * Delete a user document.
-   * @param {string} id
-   */
   async function deleteUserDoc(id) {
     _ensureConnected();
     await _db.collection(USERS_COLL).doc(id).delete();
@@ -392,12 +337,6 @@ const FirebaseService = (() => {
 const UI = (() => {
   let _timer = null;
 
-  /**
-   * Show a toast notification.
-   * @param {string} msg
-   * @param {'success'|'warning'|'error'} type
-   * @param {number} duration  ms
-   */
   function toast(msg, type = "success", duration = 3200) {
     const el = document.getElementById("toast");
     if (!el) return;
