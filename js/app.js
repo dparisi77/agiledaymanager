@@ -141,10 +141,6 @@ const App = (() => {
   }
 
   async function _afterLogin(session) {
-    console.log("[App] _afterLogin called", {
-      session,
-      fbConnected: FirebaseService.isConnected(),
-    });
     _updateUserBar(session);
 
     // Set view BEFORE loading data, so callback can render immediately
@@ -153,7 +149,6 @@ const App = (() => {
 
     // If Firebase is already connected (from init), update its callback
     if (FirebaseService.isConnected()) {
-      console.log("[App] Firebase already connected, setting callback");
       // Set view first so the callback can render when it arrives
       state.view = "main";
       // Recreate the promise for this login
@@ -167,14 +162,9 @@ const App = (() => {
         _firstDataPromise,
         new Promise((resolve) => setTimeout(resolve, 5000)), // 5 second timeout
       ]);
-      console.log(
-        "[App] After waiting for data, state.resources =",
-        state.resources?.length,
-      );
       // Show the view (which should now have data)
       _showView("main");
     } else {
-      console.log("[App] Firebase not connected, attempting connection");
       // Otherwise, attempt connection
       let cfg = null;
       let source = null;
@@ -204,18 +194,12 @@ const App = (() => {
           await FirebaseService.connect(cfg, _onFirestoreData);
           FirebaseService.setConnected(cfg.projectId || "Firebase");
           UI.toast(`🔥 Firebase connesso (${source})`, "success", 2000);
-          console.log(
-            "[App] Connected, state.resources =",
-            state.resources?.length,
-          );
           await new Promise((resolve) => setTimeout(resolve, 100));
           _showView("main"); // Ensure main view is visible
         } catch (err) {
-          console.error("[App] Connection failed:", err);
           _showView("login"); // Go back to login on error
         }
       } else {
-        console.log("[App] No Firebase config available");
         _showView("login");
       }
     }
@@ -224,7 +208,6 @@ const App = (() => {
   // ── VIEW ROUTING ─────────────────────────────────────────
 
   function _showView(viewName) {
-    console.log("[App] _showView called with:", viewName);
     state.view = viewName;
     ["loginView", "mainView", "dashboardView", "usersView"].forEach((id) => {
       document.getElementById(id)?.classList.add("d-none");
@@ -235,17 +218,9 @@ const App = (() => {
       dashboard: "dashboardView",
       users: "usersView",
     };
-    const viewEl = document.getElementById(map[viewName]);
-    console.log(
-      `[App] View element for '${viewName}':`,
-      viewEl ? "found" : "NOT FOUND",
-    );
-    viewEl?.classList.remove("d-none");
+    document.getElementById(map[viewName])?.classList.remove("d-none");
     _updateNavBar();
-    if (viewName === "main") {
-      console.log("[App] Calling render()");
-      render();
-    }
+    if (viewName === "main") render();
     if (viewName === "dashboard")
       Dashboard.render(state.resources, state.currentWeekOffset);
     if (viewName === "users") _renderUsersPanel();
@@ -340,11 +315,6 @@ const App = (() => {
   }
 
   function _onFirestoreData(resources) {
-    console.log(
-      "[App] _onFirestoreData called with",
-      resources?.length,
-      "resources",
-    );
     state.resources = resources;
 
     // Resolve the first data promise if not already resolved
@@ -739,7 +709,6 @@ const App = (() => {
   // ── MAIN RENDER ──────────────────────────────────────────
 
   function render() {
-    console.log("[App] render() called");
     _renderWeekNav();
 
     // Auto-select user's resource if available and not yet selected
@@ -758,7 +727,6 @@ const App = (() => {
     _renderResourceList();
     _renderCalendar();
     _renderDetail();
-    console.log("[App] render() complete");
     // hide admin-only sidebar elements for 'user' role
     document
       .querySelectorAll(".admin-only")
@@ -777,7 +745,6 @@ const App = (() => {
   }
 
   function _renderResourceList() {
-    console.log("[App] _renderResourceList called");
     const el = document.getElementById("resourceList");
     const countEl = document.getElementById("resCount");
     const filter = document.getElementById("filterCategory")?.value || "";
@@ -786,26 +753,14 @@ const App = (() => {
       ? state.resources.filter((r) => r.category === filter)
       : state.resources;
 
-    console.log("[App] _renderResourceList: el =", el ? "found" : "NOT FOUND");
-    console.log(
-      "[App] _renderResourceList: resources.length =",
-      resources.length,
-    );
-
     if (countEl) countEl.textContent = state.resources.length;
-    if (!el) {
-      console.log(
-        "[App] _renderResourceList: returning early, element not found",
-      );
-      return;
-    }
+    if (!el) return;
 
     if (!resources.length) {
       el.innerHTML = `<div class="empty-state">
         <i class="bi bi-${FirebaseService.isConnected() ? "people" : "fire"} d-block mb-2" style="font-size:1.5rem"></i>
         ${FirebaseService.isConnected() ? "Nessuna risorsa" : "In attesa di Firebase…"}
       </div>`;
-      console.log("[App] _renderResourceList: rendered empty state");
       return;
     }
 

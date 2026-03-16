@@ -436,11 +436,9 @@
       // Wire login/app shell visibility to auth state
       document.addEventListener('DOMContentLoaded', () => {
         Auth.onAuthChange(session => {
-          console.log('[HTML] Auth callback invoked, session:', session ? 'logged in' : 'logged out');
           const loginView = document.getElementById('loginView');
           const appShell = document.getElementById('appShell');
           if (session) {
-            console.log('[HTML] Showing appShell, hiding loginView');
             loginView?.classList.add('d-none');
             appShell?.classList.remove('d-none');
             // Pre-fill setup form if saved or if config file is available
