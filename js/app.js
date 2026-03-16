@@ -14,15 +14,89 @@ const App = (() => {
     usersList: [],
   };
 
+  // Promise that resolves when the first snapshot arrives
+  let _firstDataPromiseResolve = null;
+  let _firstDataPromise = new Promise((resolve) => {
+    _firstDataPromiseResolve = resolve;
+  });
+
   // ── INIT ─────────────────────────────────────────────────
 
-  function init() {
+  async function init() {
     Auth.onAuthChange(_onAuthChange);
+
+    // Try to connect Firebase before showing login
+    // This ensures Firebase is available for user authentication
+    await _initializeFirebase();
+
     const session = Auth.restoreSession();
     if (session) {
+      // Notify all callbacks that session has been restored
+      Auth.notifyAuthChange(session);
       _afterLogin(session);
     } else {
       _showView("login");
+    }
+  }
+
+  /**
+   * Initialize Firebase connection from saved config or config file.
+   * This is called early in app initialization, before login.
+   */
+  async function _initializeFirebase() {
+    if (FirebaseService.isConnected()) return; // Already connected
+
+    let cfg = null;
+    let source = null;
+
+    // Try saved localStorage config first
+    if (FirebaseService.hasSavedConfig()) {
+      try {
+        cfg = JSON.parse(localStorage.getItem("agileFirebaseConfig") || "{}");
+        source = "localStorage";
+      } catch (_) {}
+    }
+
+    // Fall back to config file if available
+    if (
+      !cfg &&
+      typeof FIREBASE_CONFIG !== "undefined" &&
+      FIREBASE_CONFIG.projectId
+    ) {
+      cfg = FIREBASE_CONFIG;
+      source = "config file";
+    }
+
+    // Attempt connection silently (no UI feedback at this stage)
+    if (cfg && cfg.projectId) {
+      try {
+        // Use a simple callback that just discards the data for now
+        // The real callback will be set after login
+        await FirebaseService.connect(cfg, () => {});
+      } catch (err) {
+        // Connection failed - user will see setup modal later if needed
+        console.warn("[Init] Firebase connection failed:", err);
+      }
+    }
+
+    // Update login form connection indicator
+    _updateLoginConnStatus();
+  }
+
+  /**
+   * Update the connection status indicator on the login form.
+   */
+  function _updateLoginConnStatus() {
+    const dot = document.getElementById("loginConnDot");
+    const label = document.getElementById("loginConnLabel");
+    if (!dot || !label) return;
+
+    if (FirebaseService.isConnected()) {
+      dot.style.backgroundColor = "#28a745"; // Green
+      label.textContent = "Firebase connesso";
+    } else {
+      dot.style.backgroundColor = "#dc3545"; // Red
+      label.textContent = "Firebase disconnesso";
     }
   }
 
@@ -67,10 +141,41 @@ const App = (() => {
   }
 
   async function _afterLogin(session) {
+    console.log("[App] _afterLogin called", {
+      session,
+      fbConnected: FirebaseService.isConnected(),
+    });
     _updateUserBar(session);
 
-    // Auto-connect Firebase from saved config or config file
-    if (!FirebaseService.isConnected()) {
+    // Set view BEFORE loading data, so callback can render immediately
+    if (Auth.isUser() && session.resourceId)
+      state.selectedId = session.resourceId;
+
+    // If Firebase is already connected (from init), update its callback
+    if (FirebaseService.isConnected()) {
+      console.log("[App] Firebase already connected, setting callback");
+      // Set view first so the callback can render when it arrives
+      state.view = "main";
+      // Recreate the promise for this login
+      _firstDataPromise = new Promise((resolve) => {
+        _firstDataPromiseResolve = resolve;
+      });
+      // Set the new callback and give the listener a moment to emit
+      FirebaseService.setDataCallback(_onFirestoreData);
+      // Wait for the first snapshot to arrive
+      await Promise.race([
+        _firstDataPromise,
+        new Promise((resolve) => setTimeout(resolve, 5000)), // 5 second timeout
+      ]);
+      console.log(
+        "[App] After waiting for data, state.resources =",
+        state.resources?.length,
+      );
+      // Show the view (which should now have data)
+      _showView("main");
+    } else {
+      console.log("[App] Firebase not connected, attempting connection");
+      // Otherwise, attempt connection
       let cfg = null;
       let source = null;
 
@@ -95,23 +200,31 @@ const App = (() => {
       // Connect if we have config
       if (cfg && cfg.projectId) {
         try {
+          state.view = "main"; // Set view before connecting
           await FirebaseService.connect(cfg, _onFirestoreData);
           FirebaseService.setConnected(cfg.projectId || "Firebase");
           UI.toast(`🔥 Firebase connesso (${source})`, "success", 2000);
-        } catch (_) {
-          /* will prompt via setup modal */
+          console.log(
+            "[App] Connected, state.resources =",
+            state.resources?.length,
+          );
+          await new Promise((resolve) => setTimeout(resolve, 100));
+          _showView("main"); // Ensure main view is visible
+        } catch (err) {
+          console.error("[App] Connection failed:", err);
+          _showView("login"); // Go back to login on error
         }
+      } else {
+        console.log("[App] No Firebase config available");
+        _showView("login");
       }
     }
-
-    if (Auth.isUser() && session.resourceId)
-      state.selectedId = session.resourceId;
-    _showView("main");
   }
 
   // ── VIEW ROUTING ─────────────────────────────────────────
 
   function _showView(viewName) {
+    console.log("[App] _showView called with:", viewName);
     state.view = viewName;
     ["loginView", "mainView", "dashboardView", "usersView"].forEach((id) => {
       document.getElementById(id)?.classList.add("d-none");
@@ -122,9 +235,17 @@ const App = (() => {
       dashboard: "dashboardView",
       users: "usersView",
     };
-    document.getElementById(map[viewName])?.classList.remove("d-none");
+    const viewEl = document.getElementById(map[viewName]);
+    console.log(
+      `[App] View element for '${viewName}':`,
+      viewEl ? "found" : "NOT FOUND",
+    );
+    viewEl?.classList.remove("d-none");
     _updateNavBar();
-    if (viewName === "main") render();
+    if (viewName === "main") {
+      console.log("[App] Calling render()");
+      render();
+    }
     if (viewName === "dashboard")
       Dashboard.render(state.resources, state.currentWeekOffset);
     if (viewName === "users") _renderUsersPanel();
@@ -219,7 +340,18 @@ const App = (() => {
   }
 
   function _onFirestoreData(resources) {
+    console.log(
+      "[App] _onFirestoreData called with",
+      resources?.length,
+      "resources",
+    );
     state.resources = resources;
+
+    // Resolve the first data promise if not already resolved
+    if (_firstDataPromiseResolve) {
+      _firstDataPromiseResolve();
+      _firstDataPromiseResolve = null;
+    }
 
     // Auto-select user's own resource if not already selected
     if (Auth.isUser() && !state.selectedId) {
@@ -607,6 +739,7 @@ const App = (() => {
   // ── MAIN RENDER ──────────────────────────────────────────
 
   function render() {
+    console.log("[App] render() called");
     _renderWeekNav();
 
     // Auto-select user's resource if available and not yet selected
@@ -625,6 +758,7 @@ const App = (() => {
     _renderResourceList();
     _renderCalendar();
     _renderDetail();
+    console.log("[App] render() complete");
     // hide admin-only sidebar elements for 'user' role
     document
       .querySelectorAll(".admin-only")
@@ -643,6 +777,7 @@ const App = (() => {
   }
 
   function _renderResourceList() {
+    console.log("[App] _renderResourceList called");
     const el = document.getElementById("resourceList");
     const countEl = document.getElementById("resCount");
     const filter = document.getElementById("filterCategory")?.value || "";
@@ -651,14 +786,26 @@ const App = (() => {
       ? state.resources.filter((r) => r.category === filter)
       : state.resources;
 
+    console.log("[App] _renderResourceList: el =", el ? "found" : "NOT FOUND");
+    console.log(
+      "[App] _renderResourceList: resources.length =",
+      resources.length,
+    );
+
     if (countEl) countEl.textContent = state.resources.length;
-    if (!el) return;
+    if (!el) {
+      console.log(
+        "[App] _renderResourceList: returning early, element not found",
+      );
+      return;
+    }
 
     if (!resources.length) {
       el.innerHTML = `<div class="empty-state">
         <i class="bi bi-${FirebaseService.isConnected() ? "people" : "fire"} d-block mb-2" style="font-size:1.5rem"></i>
         ${FirebaseService.isConnected() ? "Nessuna risorsa" : "In attesa di Firebase…"}
       </div>`;
+      console.log("[App] _renderResourceList: rendered empty state");
       return;
     }
 
@@ -862,9 +1009,8 @@ const App = (() => {
       .replace(/"/g, "&quot;");
   }
 
-  document.addEventListener("DOMContentLoaded", init);
-
   return {
+    init,
     submitLogin,
     logout,
     connectFirebase,

@@ -151,6 +151,17 @@ const FirebaseService = (() => {
     return _db !== null;
   }
 
+  /**
+   * Update the data callback and restart the listener.
+   * Used when Firebase is already connected but the callback needs to change.
+   * @param {Function} onData  Callback(resources[]) invoked on each snapshot
+   */
+  function setDataCallback(onData) {
+    if (!_db) return; // Not connected
+    _onDataCb = onData;
+    _startListener();
+  }
+
   // ── REAL-TIME LISTENER ───────────────────────────────────
 
   function _startListener() {
@@ -352,6 +363,7 @@ const FirebaseService = (() => {
     prefillFormFromFile,
     hasSavedConfig,
     isConnected,
+    setDataCallback,
     connect,
     connectFromForm,
     connectFromStorage,

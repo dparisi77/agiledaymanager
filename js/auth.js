@@ -24,7 +24,7 @@ const Auth = (() => {
   };
 
   let _session = null; // { id, username, role, resourceId|null }
-  let _onAuthChange = null;
+  let _onAuthChangeCallbacks = []; // Array of callbacks instead of single
 
   // ── SESSION ─────────────────────────────────────────────
 
@@ -55,17 +55,31 @@ const Auth = (() => {
   function _saveSession(data) {
     _session = data;
     sessionStorage.setItem(SESSION_KEY, JSON.stringify(data));
+    _invokeAuthCallbacks(data);
   }
 
   function logout() {
     _session = null;
     sessionStorage.removeItem(SESSION_KEY);
-    if (_onAuthChange) _onAuthChange(null);
+    _invokeAuthCallbacks(null);
   }
 
   /** Register a callback invoked whenever auth state changes. */
   function onAuthChange(cb) {
-    _onAuthChange = cb;
+    if (typeof cb === "function" && !_onAuthChangeCallbacks.includes(cb)) {
+      _onAuthChangeCallbacks.push(cb);
+    }
+  }
+
+  /** Internal: invoke all registered callbacks. */
+  function _invokeAuthCallbacks(session) {
+    _onAuthChangeCallbacks.forEach((cb) => {
+      try {
+        cb(session);
+      } catch (err) {
+        console.error("[Auth] Error in onAuthChange callback:", err);
+      }
+    });
   }
 
   // ── CRYPTO ──────────────────────────────────────────────
@@ -112,7 +126,7 @@ const Auth = (() => {
             resourceId: data.resourceId || null,
           };
           _saveSession(session);
-          if (_onAuthChange) _onAuthChange(session);
+          _invokeAuthCallbacks(session);
           return { ok: true };
         }
       } catch (e) {
@@ -131,7 +145,7 @@ const Auth = (() => {
           resourceId: null,
         };
         _saveSession(session);
-        if (_onAuthChange) _onAuthChange(session);
+        _invokeAuthCallbacks(session);
         return { ok: true };
       }
     }
@@ -286,6 +300,7 @@ const Auth = (() => {
     restoreSession,
     logout,
     onAuthChange,
+    notifyAuthChange: _invokeAuthCallbacks, // Expose callback notification
     login,
     createUser,
     deleteUser,
