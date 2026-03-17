@@ -5,6 +5,8 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Firebase Connection Test</title>
+        <link rel="icon"
+            href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75'>🔥</text></svg>" />
         <style>
             body {
                 font-family: Arial, sans-serif;
@@ -38,6 +40,10 @@
         <h1>Firebase Connection Test</h1>
         <div id="results"></div>
 
+        <!-- Firebase SDK -->
+        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+        <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
         <!-- Load firebase config and modules -->
         <script src="firebase-config.js"></script>
         <script src="js/utils.js"></script>
@@ -67,16 +73,8 @@
                 addTest(`FirebaseService.${method} exists`, typeof FirebaseService[method] === 'function');
             });
 
-            // Test 3: Try loading Firebase modules dynamically
+            // Test 3: Try Firebase connection with config file
             document.addEventListener('DOMContentLoaded', async () => {
-                try {
-                    const { initializeApp } = await import('firebase/app');
-                    addTest('Firebase SDK modules loadable', true, 'ES6 dynamic import successful');
-                } catch (err) {
-                    addTest('Firebase SDK modules loadable', false, `Error: ${err.message}`);
-                }
-
-                // Test 4: Try Firebase connection with config file
                 try {
                     FirebaseService.setConnecting();
                     await FirebaseService.connect(FIREBASE_CONFIG, () => { });

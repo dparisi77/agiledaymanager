@@ -754,6 +754,11 @@ body {
   border: 1px solid rgba(var(--accent2-rgb), 0.3);
   color: var(--accent2);
 }
+.chip-recovery {
+  background: rgba(var(--accent3-rgb), 0.12);
+  border: 1px solid rgba(var(--accent3-rgb), 0.3);
+  color: var(--accent3);
+}
 .chip-remove {
   cursor: pointer;
   opacity: 0.45;
@@ -931,6 +936,10 @@ body {
 .tag-change {
   background: rgba(var(--accent2-rgb), 0.15);
   color: var(--accent2);
+}
+.tag-recovery {
+  background: rgba(var(--accent3-rgb), 0.15);
+  color: var(--accent3);
 }
 .tag-stable {
   background: rgba(var(--accent-rgb), 0.1);
@@ -1115,6 +1124,46 @@ body {
 .modal-backdrop.show {
   opacity: 0.88 !important;
   background: #000 !important;
+}
+
+/* Confirm dialog modal */
+.confirm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 9999;
+  animation: fadeInScale 0.2s ease-out;
+}
+
+.confirm-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.confirm-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.confirm-buttons .btn {
+  font-size: 0.8rem;
+  padding: 6px 16px;
 }
 
 .setup-logo {

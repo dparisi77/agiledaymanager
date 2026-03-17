@@ -149,8 +149,9 @@ const App = (() => {
 
     // If Firebase is already connected (from init), update its callback
     if (FirebaseService.isConnected()) {
-      // Set view first so the callback can render when it arrives
-      state.view = "main";
+      // Set view based on role: dashboard for admin, main for users
+      const viewToShow = Auth.isAdmin() ? "dashboard" : "main";
+      state.view = viewToShow;
       // Recreate the promise for this login
       _firstDataPromise = new Promise((resolve) => {
         _firstDataPromiseResolve = resolve;
@@ -163,7 +164,7 @@ const App = (() => {
         new Promise((resolve) => setTimeout(resolve, 5000)), // 5 second timeout
       ]);
       // Show the view (which should now have data)
-      _showView("main");
+      _showView(viewToShow);
     } else {
       // Otherwise, attempt connection
       let cfg = null;
@@ -190,12 +191,14 @@ const App = (() => {
       // Connect if we have config
       if (cfg && cfg.projectId) {
         try {
-          state.view = "main"; // Set view before connecting
+          // Set view based on role: dashboard for admin, main for users
+          const viewToShow = Auth.isAdmin() ? "dashboard" : "main";
+          state.view = viewToShow;
           await FirebaseService.connect(cfg, _onFirestoreData);
           FirebaseService.setConnected(cfg.projectId || "Firebase");
           UI.toast(`🔥 Firebase connesso (${source})`, "success", 2000);
           await new Promise((resolve) => setTimeout(resolve, 100));
-          _showView("main"); // Ensure main view is visible
+          _showView(viewToShow); // Ensure correct view is visible
         } catch (err) {
           _showView("login"); // Go back to login on error
         }
@@ -389,30 +392,100 @@ const App = (() => {
     if (!resource) return;
 
     const wKey = Utils.weekKey(state.currentWeekOffset);
+    const currentAgileDay = Utils.getAgileDay(resource, wKey);
+    const currentChangeType = Utils.getChangeType(resource, wKey);
+
+    // If clicking the same day that's already set
+    if (currentAgileDay === newDay && !currentChangeType) {
+      UI.toast("Giorno già selezionato", "warning");
+      return;
+    }
+
+    // If already have a change in this week, only allow to switch the type or cancel
+    if (currentChangeType) {
+      const msg =
+        currentChangeType === "change"
+          ? "Hai già un cambio questa settimana. Cosa vuoi fare?"
+          : "Hai già un recupero questa settimana. Cosa vuoi fare?";
+      const action = await UI.confirm(msg, {
+        buttons: [
+          {
+            label: "Cancella",
+            value: "cancel",
+            class: "btn-outline-secondary",
+          },
+          {
+            label: "Modifica tipo",
+            value: "change_type",
+            class: "btn-primary",
+          },
+        ],
+      });
+
+      if (action === "cancel") {
+        await removeChange(id);
+        return;
+      }
+    }
+
     const coeff = Utils.getCoeffAtWeek(resource, state.currentWeekOffset);
 
-    if (coeff < Utils.COEFF_THRESHOLD) {
+    // Determine if user can make a change (not needed for recovery)
+    const canChange = coeff >= Utils.COEFF_THRESHOLD;
+
+    // Ask user what type of action: change (requires sufficient coeff) or recovery (always allowed)
+    const changeTypeOptions = canChange
+      ? [
+          {
+            label: "Cambio (penalità −" + Utils.COEFF_PENALTY + " coeff)",
+            value: "change",
+          },
+          { label: "Recupero (nessun costo)", value: "recovery" },
+        ]
+      : [
+          {
+            label: "Cambio (penalità −" + Utils.COEFF_PENALTY + " coeff)",
+            value: "change",
+            disabled: true,
+          },
+          { label: "Recupero (nessun costo)", value: "recovery" },
+        ];
+
+    const typeResult = await UI.confirm(
+      `Cambio giorno a ${Utils.DAYS[newDay]}. Quale tipo?`,
+      {
+        buttons: changeTypeOptions,
+      },
+    );
+
+    if (!typeResult) return;
+
+    // If it's a change, check coefficient
+    if (typeResult === "change" && !canChange) {
       UI.toast(
         `Coefficiente insufficiente (${coeff}). Minimo: ${Utils.COEFF_THRESHOLD}`,
         "error",
       );
       return;
     }
-    if (
-      Utils.getAgileDay(resource, wKey) === newDay &&
-      !Utils.isChanged(resource, wKey)
-    ) {
-      UI.toast("Giorno già selezionato", "warning");
-      return;
+
+    try {
+      await FirebaseService.updateResource(id, {
+        schedule: { ...resource.schedule, [wKey]: newDay },
+        changes: { ...resource.changes, [wKey]: typeResult },
+      });
+
+      const costMsg =
+        typeResult === "change"
+          ? `(−${Utils.COEFF_PENALTY} coeff)`
+          : "(nessun costo)";
+      UI.toast(
+        `${typeResult === "change" ? "Cambio" : "Recupero"} → ${Utils.DAYS[newDay]} ${costMsg}`,
+        "warning",
+      );
+    } catch (err) {
+      UI.toast("Errore: " + err.message, "error");
     }
-    await FirebaseService.updateResource(id, {
-      schedule: { ...resource.schedule, [wKey]: newDay },
-      changes: { ...resource.changes, [wKey]: true },
-    });
-    UI.toast(
-      `Cambio → ${Utils.DAYS[newDay]} (−${Utils.COEFF_PENALTY} coeff)`,
-      "warning",
-    );
   }
 
   async function removeChange(id) {
@@ -805,7 +878,7 @@ const App = (() => {
     state.resources.forEach((r) =>
       dayMap[Utils.getAgileDay(r, wKey)].push({
         r,
-        changed: Utils.isChanged(r, wKey),
+        changeType: Utils.getChangeType(r, wKey),
       }),
     );
 
@@ -814,12 +887,24 @@ const App = (() => {
         const today = Utils.isToday(d);
         const dayName = Utils.DAYS[i];
         const chips = dayMap[i]
-          .map(({ r, changed }) => {
+          .map(({ r, changeType }) => {
             const canEditChip =
               Auth.isAdmin() || Auth.getSession()?.resourceId === r.id;
-            return `<div class="chip ${changed ? "chip-changed" : "chip-agile"}">
-          <span>${_esc(r.name.split(" ")[0])}</span>
-          ${changed && canEditChip ? `<span class="chip-remove" onclick="App.removeChange('${r.id}')">×</span>` : ""}
+            const chipClass =
+              changeType === "change"
+                ? "chip-changed"
+                : changeType === "recovery"
+                  ? "chip-recovery"
+                  : "chip-agile";
+            const chipIcon =
+              changeType === "recovery"
+                ? "🔄"
+                : changeType === "change"
+                  ? "↔️"
+                  : "";
+            return `<div class="chip ${chipClass}">
+          <span>${_esc(r.name.split(" ")[0])}${chipIcon ? " " + chipIcon : ""}</span>
+          ${changeType && canEditChip ? `<span class="chip-remove" onclick="App.removeChange('${r.id}')">×</span>` : ""}
         </div>`;
           })
           .join("");
@@ -855,36 +940,53 @@ const App = (() => {
     const coeffPct =
       ((coeff - Utils.COEFF_MIN) / (Utils.COEFF_MAX - Utils.COEFF_MIN)) * 100;
     const agileDay = Utils.getAgileDay(r, wKey);
-    const changed = Utils.isChanged(r, wKey);
+    const changeType = Utils.getChangeType(r, wKey);
     const canChange = coeff >= Utils.COEFF_THRESHOLD;
     const cat = Utils.getCategory(r.category);
     const canEdit = Auth.isAdmin() || Auth.getSession()?.resourceId === r.id;
-    const totalChanges = Object.values(r.changes).filter(Boolean).length;
+    const totalChanges = Object.values(r.changes).filter(
+      (v) => v === "change",
+    ).length;
+    const totalRecoveries = Object.values(r.changes).filter(
+      (v) => v === "recovery",
+    ).length;
 
     let histHTML = "";
     for (let wo = r.createdWeekOffset; wo <= state.currentWeekOffset; wo++) {
       const wk = Utils.weekKeyForOffset(wo);
       const wDates = Utils.getWeekDates(wo);
       const aD = r.schedule[wk] !== undefined ? r.schedule[wk] : r.baseDay;
-      const chg = r.changes[wk];
+      const chgType = r.changes[wk];
       const c = Utils.getCoeffAtWeek(r, wo);
       const col =
         c >= 7 ? "var(--accent)" : c >= 4 ? "var(--accent2)" : "var(--accent3)";
+
+      let tagClass = "tag-stable";
+      let tagText = "STABILE";
+      if (chgType === "change") {
+        tagClass = "tag-change";
+        tagText = "CAMBIO";
+      } else if (chgType === "recovery") {
+        tagClass = "tag-recovery";
+        tagText = "RECUPERO";
+      }
+
       histHTML =
         `<tr>
         <td style="color:var(--muted)">${Utils.formatDate(wDates[0])}–${Utils.formatDate(wDates[4])}</td>
         <td>${Utils.DAYS[aD]}</td>
-        <td><span class="tag ${chg ? "tag-change" : "tag-stable"}">${chg ? "CAMBIO" : "STABILE"}</span></td>
+        <td><span class="tag ${tagClass}">${tagText}</span></td>
         <td style="color:${col}">${c.toFixed(1)}</td>
       </tr>` + histHTML;
     }
 
     const dayBtns = Utils.DAYS.map((_, i) => {
       const isCurrent =
-        (agileDay === i && !changed) || (changed && r.schedule[wKey] === i);
+        (agileDay === i && !changeType) ||
+        (changeType && r.schedule[wKey] === i);
       return `<button class="day-btn ${isCurrent ? "selected" : ""}"
         onclick="App.requestChange('${r.id}', ${i})"
-        ${(agileDay === i && !changed) || !canEdit ? "disabled" : ""}>
+        ${(agileDay === i && !changeType) || !canEdit ? "disabled" : ""}>
         ${Utils.DAYS_SHORT[i]}</button>`;
     }).join("");
 
@@ -899,17 +1001,18 @@ const App = (() => {
           <div style="font-size:0.58rem;color:var(--muted);margin-top:4px">ID: ${r.id}</div>
         </div>
         <div class="text-end flex-shrink-0">
-          <div style="font-size:0.62rem;color:var(--muted)">Agile oggi</div>
+          <div style="font-size:0.62rem;color:var(--muted)">Agile questa settimana</div>
           <div style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:0.9rem">${Utils.DAYS[agileDay]}</div>
-          ${changed ? '<div style="font-size:0.62rem;color:var(--accent2)"><i class="bi bi-arrow-left-right me-1"></i>Cambiato</div>' : ""}
+          ${changeType === "change" ? '<div style="font-size:0.62rem;color:var(--accent2)"><i class="bi bi-arrow-left-right me-1"></i>Cambio</div>' : changeType === "recovery" ? '<div style="font-size:0.62rem;color:var(--accent3)"><i class="bi bi-arrow-repeat me-1"></i>Recupero</div>' : ""}
         </div>
       </div>
       <div class="row g-2 mb-3">
         ${[
           ["Coefficiente", coeff.toFixed(1), Utils.coeffColor(coeff)],
-          ["Tot. cambi", totalChanges, "amber"],
+          ["Cambi", totalChanges, "amber"],
+          ["Recuperi", totalRecoveries, "amber"],
           [
-            "Cambio libero",
+            "Cambio abbailable",
             canChange ? "SÌ" : "NO",
             canChange ? "green" : "red",
           ],
@@ -934,10 +1037,10 @@ const App = (() => {
         <div class="coeff-bar"><div class="coeff-fill" style="width:${coeffPct}%"></div></div>
       </div>
       <div class="change-form mb-3">
-        <div class="change-form-title"><i class="bi bi-calendar-event me-1"></i>Richiedi Cambio — Settimana Corrente</div>
+        <div class="change-form-title"><i class="bi bi-calendar-event me-1"></i>Modifica Giorno Agile — Settimana Corrente</div>
         <div class="days-selector mb-2">${dayBtns}</div>
-        ${changed && canEdit ? `<button class="btn btn-sm btn-outline-danger" onclick="App.removeChange('${r.id}')"><i class="bi bi-x-lg me-1"></i>Annulla cambio</button>` : ""}
-        ${!canChange ? `<div class="mt-2" style="font-size:0.7rem;color:var(--accent3)"><i class="bi bi-exclamation-triangle me-1"></i>Coefficiente insufficiente (min. ${Utils.COEFF_THRESHOLD})</div>` : ""}
+        ${changeType && canEdit ? `<button class="btn btn-sm btn-outline-danger" onclick="App.removeChange('${r.id}')"><i class="bi bi-x-lg me-1"></i>Annulla ${changeType}</button>` : ""}
+        ${!canChange && state.currentWeekOffset === 0 ? `<div class="mt-2" style="font-size:0.7rem;color:var(--accent3)"><i class="bi bi-exclamation-triangle me-1"></i>Coefficiente insufficiente per cambi (min. ${Utils.COEFF_THRESHOLD}). Puoi fare recuperi senza limitazioni.</div>` : ""}
         ${!canEdit ? `<div class="mt-2" style="font-size:0.7rem;color:var(--muted)"><i class="bi bi-lock me-1"></i>Puoi modificare solo la tua risorsa</div>` : ""}
       </div>
       ${

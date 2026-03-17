@@ -2,20 +2,7 @@
  * utils.js — Agile Day Manager
  * Pure utility functions: date/week helpers, coefficient algorithm,
  * category helpers, formatting. No side-effects, no DOM access.
- * Now using date-fns for robust date operations.
  */
-
-import {
-  startOfWeek,
-  endOfWeek,
-  addDays,
-  eachDayOfInterval,
-  getISOWeek,
-  getYear,
-  format as formatDate_fn,
-  isToday as isToday_fn,
-  addWeeks,
-} from "date-fns";
 
 const Utils = (() => {
   // ── CONSTANTS ────────────────────────────────────────────
@@ -36,40 +23,72 @@ const Utils = (() => {
     { value: "Manager", label: "📋 Manager", css: "Manager" },
   ];
 
+  // ── DATE HELPERS (native implementation) ──────────────────
+
+  /**
+   * Get the Monday Date of the week containing the given date.
+   * @param {Date} d
+   * @returns {Date}
+   */
+  function _getMonday(d) {
+    const date = new Date(d);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(date.setDate(diff));
+  }
+
+  /**
+   * Get ISO week number (1-53).
+   * @param {Date} d
+   * @returns {number}
+   */
+  function _getISOWeek(d) {
+    const date = new Date(d);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + 4 - (date.getDay() || 7));
+    const yearStart = new Date(date.getFullYear(), 0, 1);
+    const weekNumber = Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
+    return weekNumber;
+  }
+
   // ── WEEK HELPERS ─────────────────────────────────────────
 
   /**
    * Returns the Monday Date of the week at `offset` weeks from today.
-   * Uses date-fns startOfWeek for robust date handling.
    * @param {number} offset
    * @returns {Date}
    */
   function getWeekStart(offset = 0) {
     const today = new Date();
-    const monday = startOfWeek(today, { weekStartsOn: 1 }); // 1 = Monday
-    return addWeeks(monday, offset);
+    const monday = _getMonday(today);
+    const result = new Date(monday);
+    result.setDate(result.getDate() + offset * 7);
+    return result;
   }
 
   /**
    * Returns an array of 5 Date objects (Mon–Fri) for the given week offset.
-   * Uses date-fns eachDayOfInterval.
    * @param {number} offset
    * @returns {Date[]}
    */
   function getWeekDates(offset = 0) {
     const mon = getWeekStart(offset);
-    const fri = addDays(mon, 4);
-    return eachDayOfInterval({ start: mon, end: fri });
+    const dates = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(mon);
+      d.setDate(d.getDate() + i);
+      dates.push(d);
+    }
+    return dates;
   }
 
   /**
    * ISO week number (1-53) for a given Date.
-   * Uses date-fns getISOWeek for standard ISO week numbering.
    * @param {Date} d
    * @returns {number}
    */
   function getWeekNumber(d) {
-    return getISOWeek(d);
+    return _getISOWeek(d);
   }
 
   /**
@@ -79,8 +98,8 @@ const Utils = (() => {
    */
   function weekKey(offset = 0) {
     const d = getWeekStart(offset);
-    const year = getYear(d);
-    const week = getISOWeek(d);
+    const year = d.getFullYear();
+    const week = _getISOWeek(d);
     const wn = String(week).padStart(2, "0");
     return `${year}-W${wn}`;
   }
@@ -94,22 +113,28 @@ const Utils = (() => {
   const weekKeyForOffset = weekKey;
 
   /**
-   * Format a Date as "DD/MM" using date-fns.
+   * Format a Date as "DD/MM".
    * @param {Date} d
    * @returns {string}
    */
   function formatDate(d) {
-    return formatDate_fn(d, "dd/MM");
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    return `${day}/${month}`;
   }
 
   /**
    * True if Date d is today.
-   * Uses date-fns isToday for reliable comparison.
    * @param {Date} d
    * @returns {boolean}
    */
   function isToday(d) {
-    return isToday_fn(d);
+    const today = new Date();
+    return (
+      d.getDate() === today.getDate() &&
+      d.getMonth() === today.getMonth() &&
+      d.getFullYear() === today.getFullYear()
+    );
   }
 
   // ── RESOURCE HELPERS ─────────────────────────────────────
@@ -134,15 +159,36 @@ const Utils = (() => {
    * @returns {boolean}
    */
   function isChanged(resource, wKey) {
-    return !!resource.changes[wKey];
+    return resource.changes[wKey] === "change";
+  }
+
+  /**
+   * True if a recovery was recorded for this resource in the given week.
+   * @param {Object} resource
+   * @param {string} wKey
+   * @returns {boolean}
+   */
+  function isRecovery(resource, wKey) {
+    return resource.changes[wKey] === "recovery";
+  }
+
+  /**
+   * Get the type of change for this week: "change" | "recovery" | undefined
+   * @param {Object} resource
+   * @param {string} wKey
+   * @returns {string|undefined}
+   */
+  function getChangeType(resource, wKey) {
+    return resource.changes[wKey];
   }
 
   /**
    * Replay coefficient history from resource creation up to targetOffset.
    * Rules:
    *   - First week (creation): no bonus/penalty
-   *   - Subsequent stable weeks: +COEFF_BONUS
-   *   - Weeks with a change: -COEFF_PENALTY
+   *   - Subsequent stable weeks (no change, no recovery): +COEFF_BONUS
+   *   - Weeks with a "change": -COEFF_PENALTY
+   *   - Weeks with a "recovery": no bonus, no penalty (neutral)
    *   - Clamped to [COEFF_MIN, COEFF_MAX]
    *
    * @param {Object} resource
@@ -155,9 +201,16 @@ const Utils = (() => {
 
     for (let w = start; w <= targetOffset; w++) {
       const wk = weekKeyForOffset(w);
-      if (resource.changes[wk]) {
+      const changeType = resource.changes[wk];
+
+      if (changeType === "change") {
+        // Change: apply penalty
         coeff = Math.max(COEFF_MIN, coeff - COEFF_PENALTY);
+      } else if (changeType === "recovery") {
+        // Recovery: no bonus, no penalty (neutral)
+        // coeff stays the same
       } else if (w > start) {
+        // Stable week: apply bonus
         coeff = Math.min(COEFF_MAX, coeff + COEFF_BONUS);
       }
     }
@@ -218,6 +271,8 @@ const Utils = (() => {
     // resource
     getAgileDay,
     isChanged,
+    isRecovery,
+    getChangeType,
     getCoeffAtWeek,
     // display
     coeffLevel,

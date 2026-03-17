@@ -16,6 +16,7 @@ const FirebaseService = (() => {
   let _unsubscribe = null;
   let _onDataCb = null; // called on every Firestore snapshot
   let _syncTimer = null;
+  let _listenerActive = false; // Track if the real-time listener is active
 
   // ── SETUP MODAL ──────────────────────────────────────────
 
@@ -139,7 +140,7 @@ const FirebaseService = (() => {
   }
 
   function isConnected() {
-    return _db !== null;
+    return _db !== null && _listenerActive;
   }
 
   function setDataCallback(onData) {
@@ -152,11 +153,43 @@ const FirebaseService = (() => {
 
   function _startListener() {
     if (_unsubscribe) _unsubscribe();
+    _listenerActive = false;
 
-    _unsubscribe = _db
-      .collection(COLLECTION)
-      .orderBy("createdAt", "asc")
-      .onSnapshot(
+    // First, try to set up listener with orderBy
+    try {
+      _unsubscribe = _db
+        .collection(COLLECTION)
+        .orderBy("createdAt", "asc")
+        .onSnapshot(
+          (snapshot) => {
+            const resources = snapshot.docs.map((docSnap) => ({
+              id: docSnap.id,
+              ...docSnap.data(),
+              schedule: docSnap.data().schedule || {},
+              changes: docSnap.data().changes || {},
+            }));
+            if (_onDataCb) _onDataCb(resources);
+            _hideSyncOverlay();
+            _setConnStatus("connected", "Sincronizzato");
+          },
+          (err) => {
+            console.error("[Firestore] snapshot error with orderBy:", err);
+            // If orderBy fails (e.g., missing index or field), retry without orderBy
+            _startListenerFallback();
+          },
+        );
+      // Mark listener as active after successfully registering the callback
+      _listenerActive = true;
+    } catch (err) {
+      console.error("[Firestore] Error setting up orderBy listener:", err);
+      _startListenerFallback();
+    }
+  }
+
+  function _startListenerFallback() {
+    // Fallback: try without orderBy
+    try {
+      _unsubscribe = _db.collection(COLLECTION).onSnapshot(
         (snapshot) => {
           const resources = snapshot.docs.map((docSnap) => ({
             id: docSnap.id,
@@ -166,13 +199,23 @@ const FirebaseService = (() => {
           }));
           if (_onDataCb) _onDataCb(resources);
           _hideSyncOverlay();
+          _setConnStatus("connected", "Sincronizzato");
         },
         (err) => {
           console.error("[Firestore] snapshot error:", err);
+          _listenerActive = false;
           _setConnStatus("error", "Errore sync");
           UI.toast("Errore sincronizzazione Firebase", "error");
         },
       );
+      // Mark listener as active after successfully registering the callback
+      _listenerActive = true;
+    } catch (err) {
+      console.error("[Firestore] Fallback listener also failed:", err);
+      _listenerActive = false;
+      _setConnStatus("error", "Errore sync");
+      UI.toast("Errore sincronizzazione Firebase", "error");
+    }
   }
 
   // ── FIRESTORE CRUD ───────────────────────────────────────
@@ -348,5 +391,60 @@ const UI = (() => {
     }, duration);
   }
 
-  return { toast };
+  /**
+   * Show a dialog with custom buttons.
+   * @param {string} message  The message to display
+   * @param {Object} options  Config with { buttons: [{label, value, class}, ...] }
+   * @returns {Promise<string|null>}  The value of the clicked button, or null if cancelled
+   */
+  function confirm(message, options = {}) {
+    return new Promise((resolve) => {
+      const { buttons = [] } = options;
+
+      // Create modal HTML
+      const modal = document.createElement("div");
+      modal.className = "confirm-modal-overlay";
+
+      const content = `
+        <div class="confirm-modal">
+          <div class="confirm-title">${message}</div>
+          <div class="confirm-buttons">
+            ${buttons
+              .map(
+                (btn) =>
+                  `<button class="btn ${btn.class || "btn-primary"}" 
+                     data-value="${btn.value}" 
+                     ${btn.disabled ? "disabled" : ""}>
+                    ${btn.label}
+                  </button>`,
+              )
+              .join("")}
+          </div>
+        </div>
+      `;
+      modal.innerHTML = content;
+
+      // Handle button clicks
+      modal.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          resolve(btn.dataset.value || null);
+          modal.remove();
+        });
+      });
+
+      // Handle ESC key
+      const escHandler = (e) => {
+        if (e.key === "Escape") {
+          resolve(null);
+          modal.remove();
+          document.removeEventListener("keydown", escHandler);
+        }
+      };
+      document.addEventListener("keydown", escHandler);
+
+      document.body.appendChild(modal);
+    });
+  }
+
+  return { toast, confirm };
 })();

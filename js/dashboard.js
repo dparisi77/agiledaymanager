@@ -11,11 +11,11 @@
  */
 
 const Dashboard = (() => {
-
   // ── AGGREGATION ──────────────────────────────────────────
 
   /**
    * Build a map  weekKey → changeCount  for the given year.
+   * Counts only "change" type, not "recovery".
    * @param {Object[]} resources
    * @param {number}   year
    * @returns {Map<string, number>}
@@ -26,12 +26,12 @@ const Dashboard = (() => {
     // Pre-fill all ISO weeks of the year (W01–W52/53)
     const weeksInYear = _isoWeeksInYear(year);
     for (let w = 1; w <= weeksInYear; w++) {
-      map.set(`${year}-W${String(w).padStart(2, '0')}`, 0);
+      map.set(`${year}-W${String(w).padStart(2, "0")}`, 0);
     }
 
-    resources.forEach(r => {
-      Object.entries(r.changes).forEach(([wk, changed]) => {
-        if (!changed) return;
+    resources.forEach((r) => {
+      Object.entries(r.changes).forEach(([wk, changeType]) => {
+        if (changeType !== "change") return; // Only count "change", not "recovery"
         if (!wk.startsWith(String(year))) return;
         if (map.has(wk)) map.set(wk, map.get(wk) + 1);
       });
@@ -48,13 +48,23 @@ const Dashboard = (() => {
    */
   function changesPerResource(resources, year, currentWeekOffset) {
     return resources
-      .map(r => {
-        const totalChanges = Object.values(r.changes).filter(Boolean).length;
-        const yearChanges  = Object.entries(r.changes)
-          .filter(([wk, v]) => v && wk.startsWith(String(year)))
-          .length;
+      .map((r) => {
+        // Count only "change" type, not "recovery"
+        const totalChanges = Object.values(r.changes).filter(
+          (v) => v === "change",
+        ).length;
+        const yearChanges = Object.entries(r.changes).filter(
+          ([wk, v]) => v === "change" && wk.startsWith(String(year)),
+        ).length;
         const coeffNow = Utils.getCoeffAtWeek(r, currentWeekOffset);
-        return { id: r.id, name: r.name, category: r.category, totalChanges, yearChanges, coeffNow };
+        return {
+          id: r.id,
+          name: r.name,
+          category: r.category,
+          totalChanges,
+          yearChanges,
+          coeffNow,
+        };
       })
       .sort((a, b) => b.totalChanges - a.totalChanges);
   }
@@ -66,22 +76,42 @@ const Dashboard = (() => {
    * @param {number}   currentWeekOffset
    */
   function kpis(resources, year, currentWeekOffset) {
-    const weekMap  = changesPerWeek(resources, year);
-    const perRes   = changesPerResource(resources, year, currentWeekOffset);
+    const weekMap = changesPerWeek(resources, year);
+    const perRes = changesPerResource(resources, year, currentWeekOffset);
 
-    const totalYear  = [...weekMap.values()].reduce((s, v) => s + v, 0);
-    const totalAll   = resources.reduce((s, r) => s + Object.values(r.changes).filter(Boolean).length, 0);
+    const totalYear = [...weekMap.values()].reduce((s, v) => s + v, 0);
+    // Count only actual "changes", not "recoveries"
+    const totalAll = resources.reduce(
+      (s, r) =>
+        s + Object.values(r.changes).filter((v) => v === "change").length,
+      0,
+    );
 
-    let peakWeek = '—'; let peakCount = 0;
-    weekMap.forEach((v, k) => { if (v > peakCount) { peakCount = v; peakWeek = k; } });
+    let peakWeek = "—";
+    let peakCount = 0;
+    weekMap.forEach((v, k) => {
+      if (v > peakCount) {
+        peakCount = v;
+        peakWeek = k;
+      }
+    });
 
     const topResource = perRes[0] || null;
 
     // Current week changes
-    const currentWKey   = Utils.weekKey(currentWeekOffset);
-    const currentChanges = resources.filter(r => r.changes[currentWKey]).length;
+    const currentWKey = Utils.weekKey(currentWeekOffset);
+    const currentChanges = resources.filter(
+      (r) => r.changes[currentWKey],
+    ).length;
 
-    return { totalYear, totalAll, peakWeek, peakCount, topResource, currentChanges };
+    return {
+      totalYear,
+      totalAll,
+      peakWeek,
+      peakCount,
+      topResource,
+      currentChanges,
+    };
   }
 
   // ── RENDER ───────────────────────────────────────────────
@@ -92,17 +122,18 @@ const Dashboard = (() => {
    * @param {number}   currentWeekOffset
    */
   function render(resources, currentWeekOffset) {
-    const el = document.getElementById('dashboardContent');
+    const el = document.getElementById("dashboardContent");
     if (!el) return;
 
-    const year    = new Date().getFullYear();
+    const year = new Date().getFullYear();
     const weekMap = changesPerWeek(resources, year);
-    const perRes  = changesPerResource(resources, year, currentWeekOffset);
-    const kpi     = kpis(resources, year, currentWeekOffset);
+    const perRes = changesPerResource(resources, year, currentWeekOffset);
+    const kpi = kpis(resources, year, currentWeekOffset);
 
-    el.innerHTML = _renderKPIs(kpi, year) +
-                   _renderWeekChart(weekMap, year) +
-                   _renderResourceTable(perRes, year);
+    el.innerHTML =
+      _renderKPIs(kpi, year) +
+      _renderWeekChart(weekMap, year) +
+      _renderResourceTable(perRes, year);
 
     // Draw chart after DOM insertion
     requestAnimationFrame(() => _drawBarChart(weekMap));
@@ -113,40 +144,47 @@ const Dashboard = (() => {
   function _renderKPIs(kpi, year) {
     const cards = [
       {
-        icon: 'bi-arrow-left-right',
+        icon: "bi-arrow-left-right",
         label: `Cambi ${year}`,
         value: kpi.totalYear,
-        color: 'amber',
+        color: "amber",
       },
       {
-        icon: 'bi-infinity',
-        label: 'Cambi totali (storico)',
+        icon: "bi-infinity",
+        label: "Cambi totali (storico)",
         value: kpi.totalAll,
-        color: 'green',
+        color: "green",
       },
       {
-        icon: 'bi-calendar-week',
-        label: 'Settimana più attiva',
-        value: kpi.peakWeek === '—' ? '—' : `${kpi.peakWeek} <small style="font-size:0.6rem">(${kpi.peakCount})</small>`,
-        color: 'accent2',
+        icon: "bi-calendar-week",
+        label: "Settimana più attiva",
+        value:
+          kpi.peakWeek === "—"
+            ? "—"
+            : `${kpi.peakWeek} <small style="font-size:0.6rem">(${kpi.peakCount})</small>`,
+        color: "accent2",
         raw: true,
       },
       {
-        icon: 'bi-person-exclamation',
-        label: 'Risorsa più attiva',
-        value: kpi.topResource ? `${kpi.topResource.name} <small style="font-size:0.6rem">(${kpi.topResource.totalChanges})</small>` : '—',
-        color: 'red',
+        icon: "bi-person-exclamation",
+        label: "Risorsa più attiva",
+        value: kpi.topResource
+          ? `${kpi.topResource.name} <small style="font-size:0.6rem">(${kpi.topResource.totalChanges})</small>`
+          : "—",
+        color: "red",
         raw: true,
       },
       {
-        icon: 'bi-calendar2-check',
-        label: 'Cambi settimana corrente',
+        icon: "bi-calendar2-check",
+        label: "Cambi settimana corrente",
         value: kpi.currentChanges,
-        color: kpi.currentChanges > 0 ? 'amber' : 'muted',
+        color: kpi.currentChanges > 0 ? "amber" : "muted",
       },
     ];
 
-    const cardsHTML = cards.map(c => `
+    const cardsHTML = cards
+      .map(
+        (c) => `
       <div class="col-6 col-md-4 col-xl">
         <div class="dash-kpi-card">
           <i class="bi ${c.icon} dash-kpi-icon"></i>
@@ -156,7 +194,9 @@ const Dashboard = (() => {
           </div>
         </div>
       </div>
-    `).join('');
+    `,
+      )
+      .join("");
 
     return `<div class="row g-3 mb-4">${cardsHTML}</div>`;
   }
@@ -182,58 +222,64 @@ const Dashboard = (() => {
   }
 
   function _drawBarChart(weekMap) {
-    const canvas = document.getElementById('weekBarChart');
+    const canvas = document.getElementById("weekBarChart");
     if (!canvas) return;
 
-    const ctx    = canvas.getContext('2d');
-    const labels = [...weekMap.keys()].map(k => k.replace(/\d{4}-/, ''));
-    const data   = [...weekMap.values()];
+    const ctx = canvas.getContext("2d");
+    const labels = [...weekMap.keys()].map((k) => k.replace(/\d{4}-/, ""));
+    const data = [...weekMap.values()];
     const maxVal = Math.max(...data, 1);
 
     // Size canvas to container
     const container = canvas.parentElement;
-    canvas.width    = container.clientWidth  || 800;
-    canvas.height   = container.clientHeight || 220;
+    canvas.width = container.clientWidth || 800;
+    canvas.height = container.clientHeight || 220;
 
-    const W  = canvas.width;
-    const H  = canvas.height;
-    const PL = 36, PR = 12, PT = 16, PB = 36;
+    const W = canvas.width;
+    const H = canvas.height;
+    const PL = 36,
+      PR = 12,
+      PT = 16,
+      PB = 36;
     const chartW = W - PL - PR;
     const chartH = H - PT - PB;
 
     ctx.clearRect(0, 0, W, H);
 
     const BAR_COUNT = labels.length;
-    const barW      = Math.max(2, (chartW / BAR_COUNT) * 0.72);
-    const gap       = chartW / BAR_COUNT;
+    const barW = Math.max(2, (chartW / BAR_COUNT) * 0.72);
+    const gap = chartW / BAR_COUNT;
 
     // Grid lines
     const gridLines = 4;
-    ctx.font = '9px IBM Plex Mono, monospace';
-    ctx.fillStyle = '#64748b';
+    ctx.font = "9px IBM Plex Mono, monospace";
+    ctx.fillStyle = "#64748b";
     for (let i = 0; i <= gridLines; i++) {
-      const y     = PT + chartH - (i / gridLines) * chartH;
+      const y = PT + chartH - (i / gridLines) * chartH;
       const label = Math.round((i / gridLines) * maxVal);
-      ctx.strokeStyle = 'rgba(42,42,62,0.9)';
-      ctx.lineWidth   = 1;
-      ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(PL + chartW, y); ctx.stroke();
+      ctx.strokeStyle = "rgba(42,42,62,0.9)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(PL, y);
+      ctx.lineTo(PL + chartW, y);
+      ctx.stroke();
       ctx.fillText(label, 2, y + 3);
     }
 
     // Bars
     data.forEach((val, i) => {
-      const x    = PL + i * gap + (gap - barW) / 2;
+      const x = PL + i * gap + (gap - barW) / 2;
       const barH = (val / maxVal) * chartH;
-      const y    = PT + chartH - barH;
+      const y = PT + chartH - barH;
 
       // Gradient fill
       const grad = ctx.createLinearGradient(0, y, 0, y + barH);
       if (val === 0) {
-        grad.addColorStop(0, 'rgba(42,42,62,0.5)');
-        grad.addColorStop(1, 'rgba(42,42,62,0.2)');
+        grad.addColorStop(0, "rgba(42,42,62,0.5)");
+        grad.addColorStop(1, "rgba(42,42,62,0.2)");
       } else {
-        grad.addColorStop(0, 'rgba(245,158,11,0.9)');
-        grad.addColorStop(1, 'rgba(245,158,11,0.3)');
+        grad.addColorStop(0, "rgba(245,158,11,0.9)");
+        grad.addColorStop(1, "rgba(245,158,11,0.3)");
       }
 
       ctx.fillStyle = grad;
@@ -243,17 +289,17 @@ const Dashboard = (() => {
 
       // Value label on top
       if (val > 0) {
-        ctx.fillStyle = '#f59e0b';
-        ctx.font = 'bold 9px IBM Plex Mono, monospace';
-        ctx.textAlign = 'center';
+        ctx.fillStyle = "#f59e0b";
+        ctx.font = "bold 9px IBM Plex Mono, monospace";
+        ctx.textAlign = "center";
         ctx.fillText(val, x + barW / 2, y - 3);
       }
 
       // X-axis label (every 4 weeks to avoid clutter)
       if (i % 4 === 0) {
-        ctx.fillStyle = '#64748b';
-        ctx.font = '8px IBM Plex Mono, monospace';
-        ctx.textAlign = 'center';
+        ctx.fillStyle = "#64748b";
+        ctx.font = "8px IBM Plex Mono, monospace";
+        ctx.textAlign = "center";
         ctx.fillText(labels[i], x + barW / 2, H - 4);
       }
     });
@@ -269,15 +315,23 @@ const Dashboard = (() => {
       </div>`;
     }
 
-    const maxChanges = Math.max(...perRes.map(r => r.totalChanges), 1);
+    const maxChanges = Math.max(...perRes.map((r) => r.totalChanges), 1);
 
-    const rows = perRes.map((r, idx) => {
-      const barPct   = Math.round((r.totalChanges / maxChanges) * 100);
-      const cat      = Utils.getCategory(r.category);
-      const cLevel   = Utils.coeffLevel(r.coeffNow);
-      const rankIcon = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx + 1}.`;
+    const rows = perRes
+      .map((r, idx) => {
+        const barPct = Math.round((r.totalChanges / maxChanges) * 100);
+        const cat = Utils.getCategory(r.category);
+        const cLevel = Utils.coeffLevel(r.coeffNow);
+        const rankIcon =
+          idx === 0
+            ? "🥇"
+            : idx === 1
+              ? "🥈"
+              : idx === 2
+                ? "🥉"
+                : `${idx + 1}.`;
 
-      return `
+        return `
         <tr>
           <td class="text-center" style="color:var(--muted);width:36px">${rankIcon}</td>
           <td>
@@ -297,12 +351,13 @@ const Dashboard = (() => {
               </span>
             </div>
           </td>
-          <td class="text-center" style="color:${r.yearChanges > 0 ? 'var(--accent2)' : 'var(--muted)'}">
+          <td class="text-center" style="color:${r.yearChanges > 0 ? "var(--accent2)" : "var(--muted)"}">
             <strong>${r.yearChanges}</strong>
           </td>
         </tr>
       `;
-    }).join('');
+      })
+      .join("");
 
     return `
       <div class="dash-panel">
@@ -339,10 +394,12 @@ const Dashboard = (() => {
 
   function _esc(str) {
     return String(str)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   // ── PUBLIC ───────────────────────────────────────────────
   return { render, changesPerWeek, changesPerResource, kpis };
-
 })();
