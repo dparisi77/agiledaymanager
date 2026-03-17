@@ -11,6 +11,7 @@ const Utils = (() => {
 
   const COEFF_BONUS = 0.5;
   const COEFF_PENALTY = 1.5;
+  const COEFF_RECOVERY_PENALTY = 3.0; // Double cost for recovery
   const COEFF_MIN = 0.0;
   const COEFF_MAX = 10.0;
   const COEFF_THRESHOLD = 5.0;
@@ -137,6 +138,37 @@ const Utils = (() => {
     );
   }
 
+  /**
+   * Get the day of week (0-4) for today: 0=Monday, 4=Friday
+   * @returns {number}
+   */
+  function getTodayDayOfWeek() {
+    const today = new Date();
+    // JS getDay(): 0=Sunday, 1=Monday, ..., 6=Saturday
+    const jsDay = today.getDay();
+    // Convert to 0=Monday, 1=Tuesday, ..., 5=Sunday
+    let dayOfWeek = jsDay - 1;
+    // If it's Sunday (6 in our system), wrap to -1, but we only care about Mon-Fri (0-4)
+    if (dayOfWeek < 0) dayOfWeek = 6; // Sunday: shift to end
+    // Return only if it's Mon-Fri (0-4)
+    return dayOfWeek <= 4 ? dayOfWeek : -1; // -1 if weekend
+  }
+
+  /**
+   * Check if it's still possible to change to a given day in the current week.
+   * Can't change to a day that has already passed (Mon-Fri only).
+   * @param {number} targetDayIndex  0-4 (Monday-Friday)
+   * @returns {boolean}  true if change is allowed
+   */
+  function canChangeToDayInCurrentWeek(targetDayIndex) {
+    const todayDay = getTodayDayOfWeek();
+    // If today is weekend or unknown, don't allow (shouldn't happen in normal flow)
+    if (todayDay < 0) return false;
+    // Can only change to days that haven't passed yet
+    // e.g., if today is Wednesday (2), can change to 2, 3, 4 (Wed, Thu, Fri)
+    return targetDayIndex >= todayDay;
+  }
+
   // ── RESOURCE HELPERS ─────────────────────────────────────
 
   /**
@@ -187,8 +219,8 @@ const Utils = (() => {
    * Rules:
    *   - First week (creation): no bonus/penalty
    *   - Subsequent stable weeks (no change, no recovery): +COEFF_BONUS
-   *   - Weeks with a "change": -COEFF_PENALTY
-   *   - Weeks with a "recovery": no bonus, no penalty (neutral)
+   *   - Weeks with a "change": -COEFF_PENALTY (1.5)
+   *   - Weeks with a "recovery": -COEFF_RECOVERY_PENALTY (3.0, double cost)
    *   - Clamped to [COEFF_MIN, COEFF_MAX]
    *
    * @param {Object} resource
@@ -207,14 +239,235 @@ const Utils = (() => {
         // Change: apply penalty
         coeff = Math.max(COEFF_MIN, coeff - COEFF_PENALTY);
       } else if (changeType === "recovery") {
-        // Recovery: no bonus, no penalty (neutral)
-        // coeff stays the same
+        // Recovery: apply double penalty
+        coeff = Math.max(COEFF_MIN, coeff - COEFF_RECOVERY_PENALTY);
       } else if (w > start) {
         // Stable week: apply bonus
         coeff = Math.min(COEFF_MAX, coeff + COEFF_BONUS);
       }
     }
     return Math.round(coeff * 10) / 10;
+  }
+
+  /**
+   * Check if there's an outstanding recovery debt from the previous week.
+   * If a change was made in the previous week, a recovery is mandatory in the current week.
+   *
+   * @param {Object} resource
+   * @param {number} currentWeekOffset  current week offset (0 = this week)
+   * @returns {Object}  { needsRecovery: boolean, reason: string }
+   */
+  function checkRecoveryDebt(resource, currentWeekOffset) {
+    // No debt in the first week
+    if (currentWeekOffset <= 0) {
+      return { needsRecovery: false, reason: null };
+    }
+
+    // Check if there was a change in the previous week
+    const prevWKey = weekKeyForOffset(currentWeekOffset - 1);
+    const hadChangeLastWeek = resource.changes[prevWKey] === "change";
+
+    if (!hadChangeLastWeek) {
+      return { needsRecovery: false, reason: null };
+    }
+
+    // Check if recovery debt has been satisfied for this week
+    const currentWKey = weekKeyForOffset(currentWeekOffset);
+    const hasRecoveryThisWeek = resource.changes[currentWKey] === "recovery";
+
+    if (hasRecoveryThisWeek) {
+      return { needsRecovery: false, reason: null };
+    }
+
+    // There's an outstanding recovery debt
+    return {
+      needsRecovery: true,
+      reason: `Hai un debito di recupero dalla settimana precedente. Devi fare un recupero questa settimana.`,
+    };
+  }
+
+  // ── CHANGE & RECOVERY VALIDATION ────────────────────────
+
+  /**
+   * Check if a change/recovery can still be made to a given day.
+   * Rules:
+   *   - For current week: only until 23:59 of the day BEFORE the target day
+   *   - For future weeks: always allowed
+   *
+   * @param {Date} targetDate  The date in the target week (e.g., the specific day of agile)
+   * @returns {boolean}  true if the deadline hasn't passed
+   */
+  function canStillChangeToDate(targetDate) {
+    const now = new Date();
+
+    // Calculate deadline: 23:59 of the day before the target date
+    const dayBefore = new Date(targetDate);
+    dayBefore.setDate(dayBefore.getDate() - 1);
+    dayBefore.setHours(23, 59, 59, 999);
+
+    return now <= dayBefore;
+  }
+
+  /**
+   * Count how many agile days (base + changes/recoveries) a resource has in a given week.
+   * @param {Object} resource
+   * @param {string} wKey  week key like "2025-W22"
+   * @returns {number} count of agile days
+   */
+  function getWeeklyAgileCount(resource, wKey) {
+    // Base day counts as 1
+    let count = 1;
+
+    // If there's a change or recovery scheduled for this week, that's the 2nd day
+    if (resource.schedule[wKey] !== undefined && resource.changes[wKey]) {
+      count = 2;
+    }
+
+    return count;
+  }
+
+  /**
+   * Check if a resource already has a recovery scheduled in a given week.
+   * @param {Object} resource
+   * @param {string} wKey
+   * @returns {boolean}
+   */
+  function hasRecoveryInWeek(resource, wKey) {
+    return resource.changes[wKey] === "recovery";
+  }
+
+  /**
+   * Check if a resource already has a change scheduled in a given week.
+   * @param {Object} resource
+   * @param {string} wKey
+   * @returns {boolean}
+   */
+  function hasChangeInWeek(resource, wKey) {
+    return resource.changes[wKey] === "change";
+  }
+
+  /**
+   * Check if a day is the same as the base day (no conflict with recovery).
+   * @param {number} dayIndex  0-4 (Monday-Friday)
+   * @param {number} baseDay   0-4 (Monday-Friday)
+   * @returns {boolean}  true if they're the same day
+   */
+  function isSameDayAsBase(dayIndex, baseDay) {
+    return dayIndex === baseDay;
+  }
+
+  /**
+   * Check if a change is still allowed for the current week:
+   * - Can only change to days that HAVEN'T passed yet
+   * - Can only change to days AFTER today
+   *
+   * @param {number} targetDayIndex  0-4 (Monday-Friday)
+   * @returns {boolean}
+   */
+  function canMakeChangeInCurrentWeek(targetDayIndex) {
+    const todayDay = getTodayDayOfWeek();
+    // If today is weekend or unknown, allow all (shouldn't happen in normal flow)
+    if (todayDay < 0) return true;
+    // Can only change to days that haven't passed yet (today onwards)
+    return targetDayIndex >= todayDay;
+  }
+
+  /**
+   * Comprehensive validation for requesting a change/recovery.
+   * Returns an object with validation result and error messages.
+   *
+   * @param {Object} resource
+   * @param {string} wKey         week key of target week
+   * @param {number} newDay       0-4 (Monday-Friday)
+   * @param {number} weekOffset   current week offset (0=this week, -1=last week, etc.)
+   * @param {string} changeType   "change" or "recovery"
+   * @returns {Object}  { valid: boolean, error: string|null }
+   */
+  function validateAgileChangeRequest(
+    resource,
+    wKey,
+    newDay,
+    weekOffset,
+    changeType,
+  ) {
+    // ── Recoveries are only allowed for future weeks ──
+    if (changeType === "recovery" && weekOffset === 0) {
+      return {
+        valid: false,
+        error:
+          "I recuperi possono essere inseriti solo la settimana successiva, entro e non oltre le 23:59 di domenica.",
+      };
+    }
+
+    // ── Check deadline (can change until 23:59 of day before) ──
+    if (weekOffset === 0) {
+      // Current week: need to check deadline
+      const weekDates = getWeekDates(weekOffset);
+      const targetDate = weekDates[newDay];
+
+      if (!canStillChangeToDate(targetDate)) {
+        // Get the day before
+        const dayBefore = newDay - 1;
+        const dayBeforeName = dayBefore < 0 ? "Domenica" : DAYS[dayBefore];
+        return {
+          valid: false,
+          error: `Non puoi più fare un cambio per ${DAYS[newDay]}. Scadenza alle 23:59 del ${dayBeforeName}.`,
+        };
+      }
+    }
+
+    // ── Check if day already passed (current week only) ──
+    if (weekOffset === 0 && !canMakeChangeInCurrentWeek(newDay)) {
+      return {
+        valid: false,
+        error: `${DAYS[newDay]} è già passato. Puoi solo cambiare nei giorni successivi.`,
+      };
+    }
+
+    // ── Check recovery conflicts with base day ──
+    if (
+      changeType === "recovery" &&
+      isSameDayAsBase(newDay, resource.baseDay)
+    ) {
+      return {
+        valid: false,
+        error: `Non puoi fare un recupero su ${DAYS[newDay]}, è il tuo giorno di lavoro agile fisso.`,
+      };
+    }
+
+    // ── Check if user already has 2 agile days this week ──
+    const agileCount = getWeeklyAgileCount(resource, wKey);
+    if (agileCount >= 2) {
+      const existingChangeType = resource.changes[wKey];
+      return {
+        valid: false,
+        error: `Hai già 2 giorni di agile questa settimana (${DAYS[resource.baseDay]} + ${existingChangeType || "cambio/recupero"}). Massimo 2 per settimana.`,
+      };
+    }
+
+    // ── For recovery, check if there's already a recovery from a previous week ──
+    if (changeType === "recovery") {
+      // Check if they already used their mandatory recovery quota
+      // For now, we'll allow only 1 recovery per week, but track it
+      if (hasRecoveryInWeek(resource, wKey)) {
+        return {
+          valid: false,
+          error: `Hai già un recupero questa settimana.`,
+        };
+      }
+    }
+
+    // ── For change in current week, only allow if day hasn't passed ──
+    if (changeType === "change" && weekOffset === 0) {
+      if (!canMakeChangeInCurrentWeek(newDay)) {
+        return {
+          valid: false,
+          error: `${DAYS[newDay]} è già passato. Puoi solo cambiare nei giorni che verranno.`,
+        };
+      }
+    }
+
+    return { valid: true, error: null };
   }
 
   // ── DISPLAY HELPERS ──────────────────────────────────────
@@ -256,6 +509,7 @@ const Utils = (() => {
     DAYS_SHORT,
     COEFF_BONUS,
     COEFF_PENALTY,
+    COEFF_RECOVERY_PENALTY,
     COEFF_MIN,
     COEFF_MAX,
     COEFF_THRESHOLD,
@@ -268,12 +522,24 @@ const Utils = (() => {
     weekKeyForOffset,
     formatDate,
     isToday,
+    getTodayDayOfWeek,
+    canChangeToDayInCurrentWeek,
     // resource
     getAgileDay,
     isChanged,
     isRecovery,
     getChangeType,
     getCoeffAtWeek,
+    // recovery debt
+    checkRecoveryDebt,
+    // change & recovery validation
+    canStillChangeToDate,
+    getWeeklyAgileCount,
+    hasRecoveryInWeek,
+    hasChangeInWeek,
+    isSameDayAsBase,
+    canMakeChangeInCurrentWeek,
+    validateAgileChangeRequest,
     // display
     coeffLevel,
     coeffColor,

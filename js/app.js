@@ -383,7 +383,7 @@ const App = (() => {
     render();
   }
 
-  async function requestChange(id, newDay) {
+  async function requestChange(id, newDay, weekOffset = 0) {
     if (Auth.isUser() && Auth.getSession().resourceId !== id) {
       UI.toast("Permesso negato", "error");
       return;
@@ -391,96 +391,120 @@ const App = (() => {
     const resource = _getResource(id);
     if (!resource) return;
 
-    const wKey = Utils.weekKey(state.currentWeekOffset);
+    // Determine the week key and change type automatically
+    const wKey = Utils.weekKey(weekOffset);
+    const changeType = weekOffset === 0 ? "change" : "recovery";
+
+    // Get the current agile day for this week
     const currentAgileDay = Utils.getAgileDay(resource, wKey);
     const currentChangeType = Utils.getChangeType(resource, wKey);
 
-    // If clicking the same day that's already set
-    if (currentAgileDay === newDay && !currentChangeType) {
+    // If clicking the same day that's already set and same type
+    if (currentAgileDay === newDay && currentChangeType === changeType) {
       UI.toast("Giorno già selezionato", "warning");
       return;
     }
 
-    // If already have a change in this week, only allow to switch the type or cancel
-    if (currentChangeType) {
-      const msg =
-        currentChangeType === "change"
-          ? "Hai già un cambio questa settimana. Cosa vuoi fare?"
-          : "Hai già un recupero questa settimana. Cosa vuoi fare?";
-      const action = await UI.confirm(msg, {
-        buttons: [
-          {
-            label: "Cancella",
-            value: "cancel",
-            class: "btn-outline-secondary",
-          },
-          {
-            label: "Modifica tipo",
-            value: "change_type",
-            class: "btn-primary",
-          },
-        ],
-      });
-
-      if (action === "cancel") {
-        await removeChange(id);
+    // ── Check for conflict between change and recovery ──
+    if (changeType === "change") {
+      // Trying to make a change in current week
+      const nextWeekKey = Utils.weekKey(1);
+      const nextWeekChangeType = Utils.getChangeType(resource, nextWeekKey);
+      if (nextWeekChangeType === "recovery") {
+        UI.toast(
+          "Hai già un recupero previsto per la prossima settimana. Non puoi avere cambio e recupero contemporaneamente.",
+          "error",
+        );
+        return;
+      }
+    } else if (changeType === "recovery") {
+      // Trying to make a recovery in next week
+      const currentWeekKey = Utils.weekKey(0);
+      const currentWeekChangeType = Utils.getChangeType(
+        resource,
+        currentWeekKey,
+      );
+      if (currentWeekChangeType === "change") {
+        UI.toast(
+          "Hai già un cambio previsto per questa settimana. Non puoi avere cambio e recupero contemporaneamente.",
+          "error",
+        );
         return;
       }
     }
 
-    const coeff = Utils.getCoeffAtWeek(resource, state.currentWeekOffset);
+    // If already have a change/recovery in this week, ask if they want to replace it
+    if (currentChangeType) {
+      const action = await UI.confirm(
+        `Hai già un ${currentChangeType} questa settimana. Sostituire con ${changeType}?`,
+        {
+          buttons: [
+            {
+              label: "Sostituisci",
+              value: "replace",
+              class: "btn-primary",
+            },
+            {
+              label: "Annulla",
+              value: "cancel",
+              class: "btn-outline-secondary",
+            },
+          ],
+        },
+      );
 
-    // Determine if user can make a change (not needed for recovery)
-    const canChange = coeff >= Utils.COEFF_THRESHOLD;
+      if (action !== "replace") {
+        return;
+      }
+    }
 
-    // Ask user what type of action: change (requires sufficient coeff) or recovery (always allowed)
-    const changeTypeOptions = canChange
-      ? [
-          {
-            label: "Cambio (penalità −" + Utils.COEFF_PENALTY + " coeff)",
-            value: "change",
-          },
-          { label: "Recupero (nessun costo)", value: "recovery" },
-        ]
-      : [
-          {
-            label: "Cambio (penalità −" + Utils.COEFF_PENALTY + " coeff)",
-            value: "change",
-            disabled: true,
-          },
-          { label: "Recupero (nessun costo)", value: "recovery" },
-        ];
-
-    const typeResult = await UI.confirm(
-      `Cambio giorno a ${Utils.DAYS[newDay]}. Quale tipo?`,
-      {
-        buttons: changeTypeOptions,
-      },
+    // Validate the change/recovery
+    const validation = Utils.validateAgileChangeRequest(
+      resource,
+      wKey,
+      newDay,
+      weekOffset,
+      changeType,
     );
 
-    if (!typeResult) return;
-
-    // If it's a change, check coefficient
-    if (typeResult === "change" && !canChange) {
-      UI.toast(
-        `Coefficiente insufficiente (${coeff}). Minimo: ${Utils.COEFF_THRESHOLD}`,
-        "error",
-      );
+    if (!validation.valid) {
+      UI.toast(validation.error, "error");
       return;
     }
 
+    // For changes in current week, verify coefficient
+    if (changeType === "change") {
+      const coeff = Utils.getCoeffAtWeek(resource, weekOffset);
+      if (coeff < Utils.COEFF_THRESHOLD) {
+        UI.toast(
+          `Coefficiente insufficiente (${coeff}). Minimo: ${Utils.COEFF_THRESHOLD}`,
+          "error",
+        );
+        return;
+      }
+    }
+
+    // Save the change/recovery
     try {
       await FirebaseService.updateResource(id, {
         schedule: { ...resource.schedule, [wKey]: newDay },
-        changes: { ...resource.changes, [wKey]: typeResult },
+        changes: { ...resource.changes, [wKey]: changeType },
       });
 
       const costMsg =
-        typeResult === "change"
+        changeType === "change"
           ? `(−${Utils.COEFF_PENALTY} coeff)`
-          : "(nessun costo)";
+          : `(−${Utils.COEFF_RECOVERY_PENALTY} coeff)`;
+      const settimanaInfo =
+        weekOffset === 0
+          ? "questa settimana"
+          : weekOffset === 1
+            ? "prossima settimana"
+            : `tra ${weekOffset} settimane`;
+
+      const actionType = changeType === "change" ? "Cambio" : "Recupero";
       UI.toast(
-        `${typeResult === "change" ? "Cambio" : "Recupero"} → ${Utils.DAYS[newDay]} ${costMsg}`,
+        `${actionType} → ${Utils.DAYS[newDay]} ${settimanaInfo} ${costMsg}`,
         "warning",
       );
     } catch (err) {
@@ -488,14 +512,14 @@ const App = (() => {
     }
   }
 
-  async function removeChange(id) {
+  async function removeChange(id, weekOffset = 0) {
     if (Auth.isUser() && Auth.getSession().resourceId !== id) {
       UI.toast("Permesso negato", "error");
       return;
     }
     const resource = _getResource(id);
     if (!resource) return;
-    const wKey = Utils.weekKey(state.currentWeekOffset);
+    const wKey = Utils.weekKey(weekOffset);
     const s = { ...resource.schedule };
     delete s[wKey];
     const c = { ...resource.changes };
@@ -984,9 +1008,45 @@ const App = (() => {
       const isCurrent =
         (agileDay === i && !changeType) ||
         (changeType && r.schedule[wKey] === i);
+
+      // Disable if already selected as current without change, or if user can't edit
+      let isDisabled = (agileDay === i && !changeType) || !canEdit;
+
+      // Also disable if day has already passed in the current week
+      if (
+        state.currentWeekOffset === 0 &&
+        !Utils.canChangeToDayInCurrentWeek(i)
+      ) {
+        isDisabled = true;
+      }
+
       return `<button class="day-btn ${isCurrent ? "selected" : ""}"
-        onclick="App.requestChange('${r.id}', ${i})"
-        ${(agileDay === i && !changeType) || !canEdit ? "disabled" : ""}>
+        onclick="App.requestChange('${r.id}', ${i}, 0)"
+        ${isDisabled ? "disabled" : ""}>
+        ${Utils.DAYS_SHORT[i]}</button>`;
+    }).join("");
+
+    // ── Buttons for next week (recovery) ──
+    const wKeyNextWeek = Utils.weekKey(1);
+    const agileNextWeek = Utils.getAgileDay(r, wKeyNextWeek);
+    const changeTypeNextWeek = Utils.getChangeType(r, wKeyNextWeek);
+
+    const dayBtnsNextWeek = Utils.DAYS.map((_, i) => {
+      const isCurrent =
+        (agileNextWeek === i && !changeTypeNextWeek) ||
+        (changeTypeNextWeek && r.schedule[wKeyNextWeek] === i);
+
+      // Disable if already selected as recovery without change, or if user can't edit
+      let isDisabled = (agileNextWeek === i && !changeTypeNextWeek) || !canEdit;
+
+      // Also disable if it's the same day as baseDay (can't recover on base day)
+      if (i === r.baseDay) {
+        isDisabled = true;
+      }
+
+      return `<button class="day-btn ${isCurrent ? "selected" : ""}"
+        onclick="App.requestChange('${r.id}', ${i}, 1)"
+        ${isDisabled ? "disabled" : ""} title="${i === r.baseDay ? "Non puoi fare un recupero nel tuo giorno agile fisso" : ""}">
         ${Utils.DAYS_SHORT[i]}</button>`;
     }).join("");
 
@@ -1012,7 +1072,7 @@ const App = (() => {
           ["Cambi", totalChanges, "amber"],
           ["Recuperi", totalRecoveries, "amber"],
           [
-            "Cambio abbailable",
+            "Cambio disponibile",
             canChange ? "SÌ" : "NO",
             canChange ? "green" : "red",
           ],
@@ -1039,9 +1099,17 @@ const App = (() => {
       <div class="change-form mb-3">
         <div class="change-form-title"><i class="bi bi-calendar-event me-1"></i>Modifica Giorno Agile — Settimana Corrente</div>
         <div class="days-selector mb-2">${dayBtns}</div>
-        ${changeType && canEdit ? `<button class="btn btn-sm btn-outline-danger" onclick="App.removeChange('${r.id}')"><i class="bi bi-x-lg me-1"></i>Annulla ${changeType}</button>` : ""}
-        ${!canChange && state.currentWeekOffset === 0 ? `<div class="mt-2" style="font-size:0.7rem;color:var(--accent3)"><i class="bi bi-exclamation-triangle me-1"></i>Coefficiente insufficiente per cambi (min. ${Utils.COEFF_THRESHOLD}). Puoi fare recuperi senza limitazioni.</div>` : ""}
+        ${changeType && canEdit ? `<button class="btn btn-sm btn-outline-danger" onclick="App.removeChange('${r.id}', 0)"><i class="bi bi-x-lg me-1"></i>Annulla ${changeType}</button>` : ""}
+        ${!canChange && state.currentWeekOffset === 0 ? `<div class="mt-2" style="font-size:0.7rem;color:var(--accent3)"><i class="bi bi-exclamation-triangle me-1"></i>Coefficiente insufficiente per cambi (min. ${Utils.COEFF_THRESHOLD}).</div>` : ""}
+        ${state.currentWeekOffset === 0 && Utils.getTodayDayOfWeek() >= 0 ? `<div class="mt-2" style="font-size:0.7rem;color:var(--muted)"><i class="bi bi-info-circle me-1"></i>I giorni già trascorsi non possono essere modificati. Disponibile il cambio per i giorni futuri della settimana.</div>` : ""}
         ${!canEdit ? `<div class="mt-2" style="font-size:0.7rem;color:var(--muted)"><i class="bi bi-lock me-1"></i>Puoi modificare solo la tua risorsa</div>` : ""}
+      </div>
+      <div class="change-form mb-3">
+        <div class="change-form-title"><i class="bi bi-arrow-repeat me-1"></i>Inserisci Recupero — Settimana Successiva</div>
+        <div class="days-selector mb-2">${dayBtnsNextWeek}</div>
+        ${changeTypeNextWeek && canEdit ? `<button class="btn btn-sm btn-outline-danger" onclick="App.removeChange('${r.id}', 1)"><i class="bi bi-x-lg me-1"></i>Annulla ${changeTypeNextWeek}</button>` : ""}
+        ${!canEdit ? `<div class="mt-2" style="font-size:0.7rem;color:var(--muted)"><i class="bi bi-lock me-1"></i>Puoi modificare solo la tua risorsa</div>` : ""}
+        <div class="mt-2" style="font-size:0.7rem;color:var(--muted)"><i class="bi bi-info-circle me-1"></i>I recuperi della settimana precedente possono essere inseriti fino alle 23:59 di domenica.</div>
       </div>
       ${
         histHTML
